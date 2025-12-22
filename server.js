@@ -21,10 +21,12 @@ const employeeRoutes = require('./routes/employeeRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const dependentRoutes = require('./routes/dependentRoutes');
+const configRoutes = require('./routes/configRoutes');
 const { authenticateToken } = require('./middleware/authMiddleware');
 
 // Public routes (no authentication required)
 app.use('/api/auth', authRoutes);
+app.use('/api/config', configRoutes);
 
 // Protected routes (authentication required)
 app.use('/api/users', userRoutes);

@@ -32,7 +32,16 @@ function getAuthHeaders() {
 }
 
 // Initialize the application
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load config (company name)
+    try {
+        const cfg = await fetch(`${API_URL}/config`).then(r => r.json());
+        const nameEl = document.getElementById('companyName');
+        if (cfg && cfg.companyName && nameEl) nameEl.textContent = cfg.companyName;
+    } catch (e) {
+        // ignore
+    }
+
     const auth = checkAuth();
     if (!auth) return;
     

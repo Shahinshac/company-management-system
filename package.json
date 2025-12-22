@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "init-db": "node database/init.js",
     "migrate-photo": "node database/migrate-add-photo.js",
+    "update-admin": "node scripts/update-admin-and-users.js",
     "vercel-build": "echo 'Build complete'",
     "deploy": "vercel --prod",
     "deploy-check": "node scripts/pre-deploy-check.js"
