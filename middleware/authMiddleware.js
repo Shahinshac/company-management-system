@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const Employee = require('../models/Employee');
 
 // Verify JWT token
 const authenticateToken = async (req, res, next) => {
@@ -13,15 +13,15 @@ const authenticateToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
     
-    // Check if user still exists and is approved
-    const user = await User.findById(decoded.id);
+    // Check if employee still exists and is active
+    const employee = await Employee.getById(decoded.id);
     
-    if (!user) {
+    if (!employee) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    if (user.Status !== 'Approved') {
-      return res.status(403).json({ error: 'Account not approved by admin' });
+    if (employee.Status !== 'Active') {
+      return res.status(403).json({ error: 'Account is inactive' });
     }
 
     req.user = decoded;
@@ -45,16 +45,7 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-// Check if user is admin or manager
-const requireAdminOrManager = (req, res, next) => {
-  if (req.user.role !== 'Admin' && req.user.role !== 'Manager') {
-    return res.status(403).json({ error: 'Admin or Manager access required' });
-  }
-  next();
-};
-
 module.exports = {
   authenticateToken,
-  requireAdmin,
-  requireAdminOrManager
+  requireAdmin
 };

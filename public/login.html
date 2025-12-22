@@ -213,12 +213,14 @@
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
 
-                    showAlert('Login successful! Redirecting...', 'success');
-
-                    // Redirect to dashboard
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 1000);
+                    if (data.user && data.user.forcePasswordChange) {
+                        showAlert('Password change required. Redirecting...', 'warning');
+                        setTimeout(() => { window.location.href = 'change-password.html'; }, 1000);
+                    } else {
+                        showAlert('Login successful! Redirecting...', 'success');
+                        // Redirect to dashboard
+                        setTimeout(() => { window.location.href = 'index.html'; }, 1000);
+                    }
                 } else {
                     showAlert(data.error || 'Login failed', 'error');
                     loginBtn.disabled = false;

@@ -76,6 +76,28 @@ router.patch('/:id/role', requireAdmin, async (req, res) => {
   }
 });
 
+// Admin: Reset user password (returns new password once)
+router.post('/:id/reset-password', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const crypto = require('crypto');
+    const rawPassword = crypto.randomBytes(9).toString('base64').slice(0,12);
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(rawPassword, 12);
+
+    const success = await Employee.updatePassword(id, passwordHash);
+    if (!success) return res.status(404).json({ error: 'User not found' });
+
+    await Employee.setForcePasswordChange(id, 1);
+
+    // Return password once
+    res.json({ message: 'Password reset successfully', generatedPassword: rawPassword });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
 // Delete user (admin only)
 router.delete('/:id', requireAdmin, async (req, res) => {
   try {
