@@ -20,7 +20,8 @@ pool.getConnection()
     connection.release();
   })
   .catch(err => {
-    console.error('Database connection failed:', err.message);
+    // Log full error for debugging
+    console.error('Database connection failed:', err && err.stack ? err.stack : err);
   });
 
 module.exports = pool;

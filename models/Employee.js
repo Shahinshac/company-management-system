@@ -111,7 +111,6 @@ class Employee {
     `, [employeeId, projectNo]);
     return result.affectedRows;
   }
-}
 
   // Authentication: find by username or email
   static async findByIdentifier(identifier) {
