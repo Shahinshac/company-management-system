@@ -1,43 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+const Employee = require('../models/Employee');
 const { body, validationResult } = require('express-validator');
 
-// Register new user
-router.post('/register', [
-  body('username').trim().isLength({ min: 3 }).withMessage('Username must be at least 3 characters'),
-  body('email').isEmail().withMessage('Valid email required'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { username, email, password } = req.body;
-
-    // Check if email already exists
-    if (await User.emailExists(email)) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
-
-    // Check if username already exists
-    if (await User.usernameExists(username)) {
-      return res.status(400).json({ error: 'Username already taken' });
-    }
-
-    // Create user
-    const userId = await User.create({ username, email, password });
-
-    res.status(201).json({
-      message: 'Registration successful! Waiting for admin approval.',
-      userId
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
-  }
+// NOTE: Public registration is disabled. All users must be created by Admin.
+router.post('/register', (req, res) => {
+  return res.status(403).json({ error: 'Self registration is disabled. Contact an administrator.' });
 });
 
 // Login
@@ -53,38 +21,35 @@ router.post('/login', [
 
     const { identifier, password } = req.body;
 
-    // Find user
-    const user = await User.findByCredentials(identifier);
-    if (!user) {
+    // Find employee by username or email
+    const employee = await Employee.findByIdentifier(identifier);
+    if (!employee) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check if user is approved
-    if (user.Status === 'Pending') {
-      return res.status(403).json({ error: 'Account pending admin approval' });
-    }
-
-    if (user.Status === 'Rejected') {
-      return res.status(403).json({ error: 'Account has been rejected' });
+    // Check status
+    if (employee.Status !== 'Active') {
+      return res.status(403).json({ error: 'Account is inactive. Contact admin.' });
     }
 
     // Verify password
-    const isValidPassword = await User.verifyPassword(password, user.Password);
+    const isValidPassword = await Employee.verifyPassword(password, employee.Password);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Generate token
-    const token = User.generateToken(user);
+    const token = Employee.generateToken(employee);
 
     res.json({
       message: 'Login successful',
       token,
       user: {
-        id: user.Id,
-        username: user.Username,
-        email: user.Email,
-        role: user.Role
+        id: employee.Id,
+        username: employee.Username,
+        email: employee.Email,
+        role: employee.Role,
+        forcePasswordChange: !!employee.ForcePasswordChange
       }
     });
   } catch (error) {
@@ -93,26 +58,16 @@ router.post('/login', [
   }
 });
 
-// Get current user profile
-router.get('/me', async (req, res) => {
+const { authenticateToken } = require('../middleware/authMiddleware');
+
+// Get current employee profile
+router.get('/me', authenticateToken, async (req, res) => {
   try {
-    // This route needs authentication middleware
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-      return res.status(401).json({ error: 'Token required' });
-    }
-
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
+    const employee = await Employee.getById(req.user.id);
+    if (!employee) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    res.json({ user });
+    res.json({ user: employee });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user info' });

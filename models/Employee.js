@@ -113,4 +113,73 @@ class Employee {
   }
 }
 
+  // Authentication: find by username or email
+  static async findByIdentifier(identifier) {
+    const [rows] = await db.query('SELECT * FROM EMPLOYEE WHERE Username = ? OR Email = ? LIMIT 1', [identifier, identifier]);
+    return rows[0];
+  }
+
+  // Create employee with authentication fields (used by admin to create accounts)
+  static async createAuthEmployee({ Username, Email, Role = 'Employee', passwordHash }) {
+    const [result] = await db.query(`
+      INSERT INTO EMPLOYEE (Username, Email, Role, Password, Status)
+      VALUES (?, ?, ?, ?, 'Active')
+    `, [Username, Email, Role, passwordHash]);
+    return result.insertId;
+  }
+
+  static async usernameExists(username) {
+    const [rows] = await db.query('SELECT Id FROM EMPLOYEE WHERE Username = ?', [username]);
+    return rows.length > 0;
+  }
+
+  static async emailExists(email) {
+    const [rows] = await db.query('SELECT Id FROM EMPLOYEE WHERE Email = ?', [email]);
+    return rows.length > 0;
+  }
+
+  static async verifyPassword(plainPassword, hashedPassword) {
+    const bcrypt = require('bcryptjs');
+    return await bcrypt.compare(plainPassword, hashedPassword);
+  }
+
+  static generateToken(employee) {
+    const jwt = require('jsonwebtoken');
+    return jwt.sign(
+      { id: employee.Id, username: employee.Username, email: employee.Email, role: employee.Role },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: process.env.JWT_EXPIRE || '24h' }
+    );
+  }
+
+  static async updatePassword(id, passwordHash) {
+    const [result] = await db.query('UPDATE EMPLOYEE SET Password = ?, ForcePasswordChange = 0 WHERE Id = ?', [passwordHash, id]);
+    return result.affectedRows > 0;
+  }
+
+  static async setForcePasswordChange(id, flag = 1) {
+    const [result] = await db.query('UPDATE EMPLOYEE SET ForcePasswordChange = ? WHERE Id = ?', [flag, id]);
+    return result.affectedRows > 0;
+  }
+
+  static async getAllUsers() {
+    const [rows] = await db.query('SELECT Id, Name, Username, Email, Role, Status, created_at FROM EMPLOYEE ORDER BY created_at DESC');
+    return rows;
+  }
+
+  static async updateRole(id, role) {
+    const [result] = await db.query('UPDATE EMPLOYEE SET Role = ? WHERE Id = ?', [role, id]);
+    return result.affectedRows > 0;
+  }
+
+  static async setStatus(id, status) {
+    const [result] = await db.query('UPDATE EMPLOYEE SET Status = ? WHERE Id = ?', [status, id]);
+    return result.affectedRows > 0;
+  }
+
+  static async deleteEmployee(id) {
+    const [result] = await db.query('DELETE FROM EMPLOYEE WHERE Id = ?', [id]);
+    return result.affectedRows > 0;
+  }
+
 module.exports = Employee;

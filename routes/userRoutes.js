@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+const Employee = require('../models/Employee');
 const { authenticateToken, requireAdmin } = require('../middleware/authMiddleware');
 
 // All routes require authentication
 router.use(authenticateToken);
 
-// Get all users (admin only)
+// Get all employees (admin only)
 router.get('/', requireAdmin, async (req, res) => {
   try {
-    const users = await User.getAll();
+    const users = await Employee.getAllUsers();
     res.json(users);
   } catch (error) {
     console.error('Get users error:', error);
@@ -17,48 +17,85 @@ router.get('/', requireAdmin, async (req, res) => {
   }
 });
 
-// Get pending users (admin only)
-router.get('/pending', requireAdmin, async (req, res) => {
+// Create new employee (admin only)
+router.post('/', requireAdmin, async (req, res) => {
   try {
-    const users = await User.getPendingUsers();
-    res.json(users);
+    const { username, email, role = 'Employee' } = req.body;
+
+    if (!username || !email) {
+      return res.status(400).json({ error: 'Username and email are required' });
+    }
+
+    // Prevent duplicates
+    if (await Employee.usernameExists(username)) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+    if (await Employee.emailExists(email)) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    // Generate secure random password (12 chars)
+    const crypto = require('crypto');
+    const rawPassword = crypto.randomBytes(9).toString('base64').slice(0,12);
+
+    // Hash the password
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(rawPassword, 12);
+
+    // Create employee record
+    const userId = await Employee.createAuthEmployee({ Username: username, Email: email, Role: role, passwordHash });
+
+    // Return the generated password ONCE
+    res.status(201).json({ message: 'Employee created', userId, generatedPassword: rawPassword });
   } catch (error) {
-    console.error('Get pending users error:', error);
-    res.status(500).json({ error: 'Failed to fetch pending users' });
+    console.error('Create employee error:', error);
+    res.status(500).json({ error: 'Failed to create employee' });
   }
 });
 
-// Approve user (admin only)
-router.patch('/:id/approve', requireAdmin, async (req, res) => {
+// Update user role (admin only)
+router.patch('/:id/role', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const success = await User.approveUser(id);
+    const { role } = req.body;
+    
+    if (!['Admin', 'Employee'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+    
+    const success = await Employee.updateRole(id, role);
     
     if (!success) {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    res.json({ message: 'User approved successfully' });
+    res.json({ message: 'User role updated successfully' });
   } catch (error) {
-    console.error('Approve user error:', error);
-    res.status(500).json({ error: 'Failed to approve user' });
+    console.error('Update role error:', error);
+    res.status(500).json({ error: 'Failed to update user role' });
   }
 });
 
-// Reject user (admin only)
-router.patch('/:id/reject', requireAdmin, async (req, res) => {
+// Delete user (admin only)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const success = await User.rejectUser(id);
+    
+    // Prevent admin from deleting themselves
+    if (parseInt(id) === req.user.id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+    
+    const success = await Employee.deleteEmployee(id);
     
     if (!success) {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    res.json({ message: 'User rejected successfully' });
+    res.json({ message: 'User deleted successfully' });
   } catch (error) {
-    console.error('Reject user error:', error);
-    res.status(500).json({ error: 'Failed to reject user' });
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 

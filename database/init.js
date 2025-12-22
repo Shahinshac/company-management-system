@@ -17,20 +17,16 @@ async function initializeDatabase() {
     // Use the database
     await connection.query(`USE ${process.env.DB_NAME || 'company_management'}`);
 
-    // Create USER table for authentication
+    // Add authentication fields to EMPLOYEE table (if missing)
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS USER (
-        Id INT AUTO_INCREMENT PRIMARY KEY,
-        Username VARCHAR(50) UNIQUE NOT NULL,
-        Email VARCHAR(100) UNIQUE NOT NULL,
-        Password VARCHAR(255) NOT NULL,
-        Role ENUM('Admin', 'Manager', 'Employee') DEFAULT 'Employee',
-        Status ENUM('Pending', 'Approved', 'Rejected') DEFAULT 'Pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
+      ALTER TABLE EMPLOYEE
+      ADD COLUMN IF NOT EXISTS Username VARCHAR(50) UNIQUE,
+      ADD COLUMN IF NOT EXISTS Password VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS Role ENUM('Admin','Employee') DEFAULT 'Employee',
+      ADD COLUMN IF NOT EXISTS Status ENUM('Active','Inactive') DEFAULT 'Active',
+      ADD COLUMN IF NOT EXISTS ForcePasswordChange TINYINT(1) DEFAULT 0
     `);
-    console.log('USER table created');
+    console.log('EMPLOYEE table updated with authentication fields');
 
     // Create DEPARTMENT table
     await connection.query(`
@@ -194,14 +190,14 @@ async function initializeDatabase() {
     `);
     console.log('Sample dependents inserted');
 
-    // Create default admin user
+    // Create default admin in EMPLOYEE table if not exists
     const bcrypt = require('bcryptjs');
     const adminPassword = await bcrypt.hash('admin123', 10);
     await connection.query(`
-      INSERT IGNORE INTO USER (Username, Email, Password, Role, Status) VALUES
-      ('admin', 'admin@company.com', '${adminPassword}', 'Admin', 'Approved')
+      INSERT IGNORE INTO EMPLOYEE (Name, Username, Email, Password, Role, Status)
+      VALUES ('Administrator', 'admin', 'admin@company.com', '${adminPassword}', 'Admin', 'Active')
     `);
-    console.log('Default admin user created (Username: admin, Password: admin123)');
+    console.log('Default admin employee created (Username: admin, Password: admin123)');
 
     console.log('\n✅ Database initialization completed successfully!');
 
