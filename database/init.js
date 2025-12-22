@@ -1,6 +1,23 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
+// Helper function to add column if it doesn't exist (MySQL 5.x compatible)
+async function addColumnIfNotExists(connection, table, column, definition) {
+  try {
+    const [rows] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
+    `, [process.env.DB_NAME || 'company_management', table, column]);
+    
+    if (rows.length === 0) {
+      await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      console.log(`Added column ${column} to ${table}`);
+    }
+  } catch (err) {
+    // Table might not exist yet, ignore
+  }
+}
+
 async function initializeDatabase() {
   const connection = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
@@ -16,17 +33,6 @@ async function initializeDatabase() {
 
     // Use the database
     await connection.query(`USE ${process.env.DB_NAME || 'company_management'}`);
-
-    // Add authentication fields to EMPLOYEE table (if missing)
-    await connection.query(`
-      ALTER TABLE EMPLOYEE
-      ADD COLUMN IF NOT EXISTS Username VARCHAR(50) UNIQUE,
-      ADD COLUMN IF NOT EXISTS Password VARCHAR(255),
-      ADD COLUMN IF NOT EXISTS Role ENUM('Admin','Employee') DEFAULT 'Employee',
-      ADD COLUMN IF NOT EXISTS Status ENUM('Active','Inactive') DEFAULT 'Active',
-      ADD COLUMN IF NOT EXISTS ForcePasswordChange TINYINT(1) DEFAULT 0
-    `);
-    console.log('EMPLOYEE table updated with authentication fields');
 
     // Create DEPARTMENT table
     await connection.query(`
@@ -63,6 +69,14 @@ async function initializeDatabase() {
       )
     `);
     console.log('EMPLOYEE table created');
+
+    // Add authentication columns to EMPLOYEE (MySQL 5.x compatible)
+    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Username', 'VARCHAR(50) UNIQUE');
+    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Password', 'VARCHAR(255)');
+    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Role', "ENUM('Admin','Employee') DEFAULT 'Employee'");
+    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Status', "ENUM('Active','Inactive') DEFAULT 'Active'");
+    await addColumnIfNotExists(connection, 'EMPLOYEE', 'ForcePasswordChange', 'TINYINT(1) DEFAULT 0');
+    console.log('EMPLOYEE table updated with authentication fields');
 
     // Add foreign key for manager in DEPARTMENT table
     await connection.query(`

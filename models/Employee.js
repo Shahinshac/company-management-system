@@ -180,5 +180,6 @@ class Employee {
     const [result] = await db.query('DELETE FROM EMPLOYEE WHERE Id = ?', [id]);
     return result.affectedRows > 0;
   }
+}
 
 module.exports = Employee;
