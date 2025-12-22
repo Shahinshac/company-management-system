@@ -444,6 +444,26 @@ function showAddDepartmentModal() {
     alert('Add Department functionality - Implement modal similar to employee');
 }
 
+async function deleteUserAccount(userId) {
+    if (!confirm('Are you sure you want to delete this user account?')) return;
+    try {
+        const response = await fetch(`${API_URL}/users/${userId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('User account deleted');
+            loadPendingUsers();
+        } else {
+            alert('Error: ' + (data.error || 'Delete failed'));
+        }
+    } catch (error) {
+        console.error('Error deleting user account:', error);
+        alert('Failed to delete user account');
+    }
+}
+
 // PROJECTS
 async function loadProjects() {
     const container = document.getElementById('projectsTable');
@@ -666,20 +686,22 @@ async function loadPendingUsers() {
     if (!container) return;
     
     try {
-        const response = await fetch(`${API_URL}/users/pending`, {
+        const response = await fetch(`${API_URL}/users`, {
             headers: getAuthHeaders()
         });
         const users = await response.json();
         
         if (users.length > 0) {
             let html = `
-                <h3>Pending User Approvals</h3>
+                <h3>Employees</h3>
                 <table>
                     <thead>
                         <tr>
                             <th>Username</th>
                             <th>Email</th>
-                            <th>Registered</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Created</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -689,12 +711,13 @@ async function loadPendingUsers() {
             users.forEach(user => {
                 html += `
                     <tr>
-                        <td>${user.Username}</td>
-                        <td>${user.Email}</td>
+                        <td>${user.Username || ''}</td>
+                        <td>${user.Email || ''}</td>
+                        <td>${user.Role || 'Employee'}</td>
+                        <td>${user.Status || 'Active'}</td>
                         <td>${new Date(user.created_at).toLocaleDateString()}</td>
                         <td>
-                            <button class="btn btn-small btn-primary" onclick="approveUser(${user.Id})">Approve</button>
-                            <button class="btn btn-small btn-danger" onclick="rejectUser(${user.Id})">Reject</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteUserAccount(${user.Id})">Delete</button>
                         </td>
                     </tr>
                 `;
@@ -703,10 +726,10 @@ async function loadPendingUsers() {
             html += '</tbody></table>';
             container.innerHTML = html;
         } else {
-            container.innerHTML = '<p>No pending user approvals</p>';
+            container.innerHTML = '<p>No employees found</p>';
         }
     } catch (error) {
-        console.error('Error loading pending users:', error);
+        console.error('Error loading employees:', error);
     }
 }
 
@@ -751,6 +774,48 @@ async function rejectUser(userId) {
     } catch (error) {
         console.error('Error rejecting user:', error);
         alert('Failed to reject user');
+    }
+}
+
+function openCreateEmployeeModal() {
+    document.getElementById('createEmployeeModal').classList.add('active');
+    document.getElementById('generatedPasswordBox').style.display = 'none';
+    document.getElementById('generatedPassword').textContent = '';
+}
+
+async function createEmployee() {
+    const username = document.getElementById('newUsername').value.trim();
+    const email = document.getElementById('newEmail').value.trim();
+    const role = document.getElementById('newRole').value;
+
+    if (!username || !email) {
+        alert('Username and email are required');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/users`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ username, email, role })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            // Show generated password once
+            document.getElementById('generatedPassword').textContent = data.generatedPassword;
+            document.getElementById('generatedPasswordBox').style.display = 'block';
+            // clear inputs
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newEmail').value = '';
+            // Reload user list
+            setTimeout(() => { loadPendingUsers(); }, 1000);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to create employee'));
+        }
+    } catch (error) {
+        console.error('Error creating employee:', error);
+        alert('Failed to create employee');
     }
 }
 
