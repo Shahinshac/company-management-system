@@ -30,6 +30,39 @@
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            flex: 1;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        #userInfo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .logout-btn:hover {
+            background: #c82333;
         }
 
         h1 {
@@ -285,6 +318,10 @@
             margin-bottom: 15px;
         }
 
+        .admin-only {
+            display: none;
+        }
+
         .success-message {
             background: #d4edda;
             color: #155724;
@@ -339,9 +376,17 @@
 <body>
     <div class="container">
         <header>
-            <h1>🏢 Company Management System</h1>
-            <p class="subtitle">Professional multi-branch company management solution</p>
+            <div class="header-left">
+                <h1>🏢 Company Management System</h1>
+                <p class="subtitle">Professional multi-branch company management solution</p>
+            </div>
+            <div class="header-right">
+                <div id="userInfo"></div>
+            </div>
         </header>
+
+        <!-- Pending Users (Admin Only) -->
+        <div id="pendingUsersTable" class="admin-only" style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;"></div>
 
         <!-- Statistics Dashboard -->
         <div class="stats-grid" id="statsGrid">

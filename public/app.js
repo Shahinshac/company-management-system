@@ -2,8 +2,57 @@ const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3000/api' 
   : '/api';
 
+// Authentication check
+function checkAuth() {
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    
+    if (!token) {
+        window.location.href = 'login.html';
+        return null;
+    }
+    
+    return { token, user };
+}
+
+// Logout function
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = 'login.html';
+}
+
+// Get auth headers
+function getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
+    const auth = checkAuth();
+    if (!auth) return;
+    
+    // Display user info
+    const userInfo = document.getElementById('userInfo');
+    if (userInfo) {
+        userInfo.innerHTML = `
+            <span>Welcome, <strong>${auth.user.username}</strong> (${auth.user.role})</span>
+            <button onclick="logout()" class="logout-btn">Logout</button>
+        `;
+    }
+    
+    // Show/hide admin sections
+    if (auth.user.role === 'Admin') {
+        document.querySelectorAll('.admin-only').forEach(el => {
+            el.style.display = 'block';
+        });
+        loadPendingUsers();
+    }
+    
     loadDashboardStats();
     loadEmployees();
     loadDepartmentOptions();
@@ -45,11 +94,12 @@ function switchTab(tabName) {
 // Load dashboard statistics
 async function loadDashboardStats() {
     try {
+        const headers = getAuthHeaders();
         const [employees, departments, projects, dependents] = await Promise.all([
-            fetch(`${API_URL}/employees`).then(r => r.json()),
-            fetch(`${API_URL}/departments`).then(r => r.json()),
-            fetch(`${API_URL}/projects`).then(r => r.json()),
-            fetch(`${API_URL}/dependents`).then(r => r.json())
+            fetch(`${API_URL}/employees`, { headers }).then(r => r.json()),
+            fetch(`${API_URL}/departments`, { headers }).then(r => r.json()),
+            fetch(`${API_URL}/projects`, { headers }).then(r => r.json()),
+            fetch(`${API_URL}/dependents`, { headers }).then(r => r.json())
         ]);
         
         document.getElementById('totalEmployees').textContent = employees.count || 0;
@@ -67,7 +117,7 @@ async function loadEmployees() {
     container.innerHTML = '<div class="loading">Loading employees...</div>';
     
     try {
-        const response = await fetch(`${API_URL}/employees`);
+        const response = await fetch(`${API_URL}/employees`, { headers: getAuthHeaders() });
         const data = await response.json();
         
         if (data.success && data.data.length > 0) {
@@ -130,7 +180,7 @@ async function searchEmployees() {
     
     const container = document.getElementById('employeesTable');
     try {
-        const response = await fetch(`${API_URL}/employees/search?q=${encodeURIComponent(searchTerm)}`);
+        const response = await fetch(`${API_URL}/employees/search?q=${encodeURIComponent(searchTerm)}`, { headers: getAuthHeaders() });
         const data = await response.json();
         
         if (data.success && data.data.length > 0) {
@@ -226,7 +276,7 @@ async function saveEmployee(event) {
     try {
         const response = await fetch(`${API_URL}/employees`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify(employeeData)
         });
         
@@ -251,7 +301,7 @@ async function deleteEmployee(id) {
     if (!confirm('Are you sure you want to delete this employee?')) return;
     
     try {
-        const response = await fetch(`${API_URL}/employees/${id}`, { method: 'DELETE' });
+        const response = await fetch(`${API_URL}/employees/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
         const data = await response.json();
         
         if (data.success) {
@@ -269,7 +319,7 @@ async function deleteEmployee(id) {
 
 async function viewEmployee(id) {
     try {
-        const response = await fetch(`${API_URL}/employees/${id}`);
+        const response = await fetch(`${API_URL}/employees/${id}`, { headers: getAuthHeaders() });
         const data = await response.json();
         
         if (data.success) {
@@ -609,3 +659,98 @@ window.onclick = function(event) {
         event.target.classList.remove('active');
     }
 }
+
+// USER MANAGEMENT (Admin Only)
+async function loadPendingUsers() {
+    const container = document.getElementById('pendingUsersTable');
+    if (!container) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/users/pending`, {
+            headers: getAuthHeaders()
+        });
+        const users = await response.json();
+        
+        if (users.length > 0) {
+            let html = `
+                <h3>Pending User Approvals</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Registered</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            users.forEach(user => {
+                html += `
+                    <tr>
+                        <td>${user.Username}</td>
+                        <td>${user.Email}</td>
+                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <button class="btn btn-small btn-primary" onclick="approveUser(${user.Id})">Approve</button>
+                            <button class="btn btn-small btn-danger" onclick="rejectUser(${user.Id})">Reject</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<p>No pending user approvals</p>';
+        }
+    } catch (error) {
+        console.error('Error loading pending users:', error);
+    }
+}
+
+async function approveUser(userId) {
+    try {
+        const response = await fetch(`${API_URL}/users/${userId}/approve`, {
+            method: 'PATCH',
+            headers: getAuthHeaders()
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('User approved successfully!');
+            loadPendingUsers();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error approving user:', error);
+        alert('Failed to approve user');
+    }
+}
+
+async function rejectUser(userId) {
+    if (!confirm('Are you sure you want to reject this user?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/users/${userId}/reject`, {
+            method: 'PATCH',
+            headers: getAuthHeaders()
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('User rejected');
+            loadPendingUsers();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error rejecting user:', error);
+        alert('Failed to reject user');
+    }
+}
+

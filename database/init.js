@@ -17,6 +17,21 @@ async function initializeDatabase() {
     // Use the database
     await connection.query(`USE ${process.env.DB_NAME || 'company_management'}`);
 
+    // Create USER table for authentication
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS USER (
+        Id INT AUTO_INCREMENT PRIMARY KEY,
+        Username VARCHAR(50) UNIQUE NOT NULL,
+        Email VARCHAR(100) UNIQUE NOT NULL,
+        Password VARCHAR(255) NOT NULL,
+        Role ENUM('Admin', 'Manager', 'Employee') DEFAULT 'Employee',
+        Status ENUM('Pending', 'Approved', 'Rejected') DEFAULT 'Pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('USER table created');
+
     // Create DEPARTMENT table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS DEPARTMENT (
@@ -178,6 +193,15 @@ async function initializeDatabase() {
       (5, 'Anna Wilson', 'Female', 'Spouse', '1989-09-15')
     `);
     console.log('Sample dependents inserted');
+
+    // Create default admin user
+    const bcrypt = require('bcryptjs');
+    const adminPassword = await bcrypt.hash('admin123', 10);
+    await connection.query(`
+      INSERT IGNORE INTO USER (Username, Email, Password, Role, Status) VALUES
+      ('admin', 'admin@company.com', '${adminPassword}', 'Admin', 'Approved')
+    `);
+    console.log('Default admin user created (Username: admin, Password: admin123)');
 
     console.log('\n✅ Database initialization completed successfully!');
 

@@ -1,0 +1,60 @@
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+
+// Verify JWT token
+const authenticateToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    
+    // Check if user still exists and is approved
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    if (user.Status !== 'Approved') {
+      return res.status(403).json({ error: 'Account not approved by admin' });
+    }
+
+    req.user = decoded;
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(403).json({ error: 'Token expired' });
+    }
+    return res.status(500).json({ error: 'Authentication failed' });
+  }
+};
+
+// Check if user is admin
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'Admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
+// Check if user is admin or manager
+const requireAdminOrManager = (req, res, next) => {
+  if (req.user.role !== 'Admin' && req.user.role !== 'Manager') {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
+  }
+  next();
+};
+
+module.exports = {
+  authenticateToken,
+  requireAdmin,
+  requireAdminOrManager
+};

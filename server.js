@@ -15,15 +15,23 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Routes
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const departmentRoutes = require('./routes/departmentRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const dependentRoutes = require('./routes/dependentRoutes');
+const { authenticateToken } = require('./middleware/authMiddleware');
 
-app.use('/api/employees', employeeRoutes);
-app.use('/api/departments', departmentRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/dependents', dependentRoutes);
+// Public routes (no authentication required)
+app.use('/api/auth', authRoutes);
+
+// Protected routes (authentication required)
+app.use('/api/users', userRoutes);
+app.use('/api/employees', authenticateToken, employeeRoutes);
+app.use('/api/departments', authenticateToken, departmentRoutes);
+app.use('/api/projects', authenticateToken, projectRoutes);
+app.use('/api/dependents', authenticateToken, dependentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -34,13 +42,16 @@ app.get('/api/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to Company Management System API',
-    version: '1.0.0',
+    version: '2.0.0',
     endpoints: {
+      auth: '/api/auth (login, register)',
+      users: '/api/users (admin)',
       employees: '/api/employees',
       departments: '/api/departments',
       projects: '/api/projects',
       dependents: '/api/dependents'
-    }
+    },
+    note: 'Most endpoints require authentication'
   });
 });
 
