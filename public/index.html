@@ -424,10 +424,10 @@
                     <option value="malappuram">Malappuram</option>
                     <option value="hyderabad">Hyderabad</option>
                 </select>
-                <button class="btn" onclick="showAddEmployeeModal()">+ Add Employee</button>
-            </div>
+                <button class="btn" onclick="showAddEmployeeModal()">+ Add Employee</button>                <button class="btn" onclick="(function(){document.getElementById('employeesTable').style.display='none'; document.getElementById('reportsTable').style.display='block'; loadReports();})();">Reports</button>            </div>
         </div>
         <div id="employeesTable"></div>
+        <div id="reportsTable" style="display:none; margin-top:20px;"></div>
     </div>
 
     <!-- Modal for Add/Edit Employee -->

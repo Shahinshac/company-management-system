@@ -96,6 +96,9 @@ function switchTab(tabName) {
         case 'dependents':
             loadDependents();
             break;
+        case 'reports':
+            loadReports();
+            break;
     }
 }
 
@@ -150,6 +153,7 @@ async function loadEmployees() {
                             <th>Email</th>
                             <th>Phone</th>
                             <th>Department</th>
+                            <th>Role</th>
                             <th>Salary</th>
                             <th>Actions</th>
                         </tr>
@@ -170,6 +174,7 @@ async function loadEmployees() {
                         <td>${emp.Email || 'N/A'}</td>
                         <td>${emp.Phone || 'N/A'}</td>
                         <td>${emp.Department_Name || 'N/A'}</td>
+                        <td>${emp.Role || 'Employee'}</td>
                         <td>$${emp.Salary ? parseFloat(emp.Salary).toFixed(2) : '0.00'}</td>
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewEmployee(${emp.Id})">View</button>
@@ -480,6 +485,95 @@ async function viewEmployee(id) {
     } catch (error) {
         console.error('Error:', error);
     }
+}
+
+// REPORTS
+async function loadReports() {
+    const container = document.getElementById('reportsTable');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Loading reports...</div>';
+    try {
+        const resp = await fetch(`${API_URL}/reports`, { headers: getAuthHeaders() });
+        const data = await resp.json();
+        const rows = (data && data.data) ? data.data : [];
+        if (rows.length === 0) {
+            container.innerHTML = '<p>No report data available.</p>';
+            return;
+        }
+
+        let html = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px;">
+            <h3>Employee Reports</h3>
+            <div>
+              <button class="btn admin-only" onclick="rebuildReports()">Rebuild Reports</button>
+              <button class="btn" onclick="showEmployeesFromReports()">Back to Employees</button>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Employee ID</th>
+                <th>Username</th>
+                <th>Name</th>
+                <th>Department</th>
+                <th>Projects</th>
+                <th>Dependents</th>
+                <th>Last Audits</th>
+                <th>Created At</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        rows.forEach(r => {
+            const dept = r.Department ? (`${r.Department.Name || ''} ${r.Department.Location ? '(' + r.Department.Location + ')' : ''}`) : 'N/A';
+            const projs = (r.Projects || []).map(p => `${p.Name || p.Name} ${p.Hours ? '(' + p.Hours + 'h)' : ''}`).join(', ') || 'None';
+            const deps = (r.Dependents || []);
+            const audits = (r.Audits || []).slice(0,3).map(a => `${a.Action} by ${a.Changed_By || 'system'} on ${new Date(a.Created_At).toLocaleString()}`).join('<br/>') || 'None';
+
+            html += `
+              <tr>
+                <td>${r.Employee_Id}</td>
+                <td>${r.Employee_Username}</td>
+                <td>${r.Employee_Name || ''}</td>
+                <td>${dept}</td>
+                <td>${projs}</td>
+                <td>${deps.length}</td>
+                <td>${audits}</td>
+                <td>${new Date(r.Created_At).toLocaleString()}</td>
+              </tr>
+            `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="error-message">Failed to load reports</p>';
+        console.error('Error loading reports:', err);
+    }
+}
+
+async function rebuildReports() {
+    if (!confirm('Rebuild reports now? This may take a moment.')) return;
+    try {
+        const resp = await fetch(`${API_URL}/reports/rebuild`, { method: 'POST', headers: getAuthHeaders() });
+        const data = await resp.json();
+        if (resp.ok) {
+            alert('Reports rebuilt');
+            loadReports();
+        } else {
+            alert('Failed to rebuild reports: ' + (data && data.error ? data.error : 'Unknown'));
+        }
+    } catch (err) {
+        console.error('Rebuild error:', err);
+        alert('Failed to rebuild reports');
+    }
+}
+
+function showEmployeesFromReports() {
+    document.getElementById('reportsTable').style.display = 'none';
+    document.getElementById('employeesTable').style.display = 'block';
+    loadEmployees();
 }
 
 // DEPARTMENTS
