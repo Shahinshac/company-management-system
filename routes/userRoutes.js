@@ -9,7 +9,8 @@ router.use(authenticateToken);
 // Get all employees (admin only)
 router.get('/', requireAdmin, async (req, res) => {
   try {
-    const users = await Employee.getAllUsers();
+    const branch = req.query.branch || null;
+    const users = await Employee.getAllUsers(branch);
     res.json(users);
   } catch (error) {
     console.error('Get users error:', error);
@@ -20,7 +21,7 @@ router.get('/', requireAdmin, async (req, res) => {
 // Create new employee (admin only)
 router.post('/', requireAdmin, async (req, res) => {
   try {
-    const { username, email, role = 'Employee', Name } = req.body;
+    const { username, email, role = 'Employee', Name, Branch = null } = req.body;
     console.log('Create user request body:', { username, email, role });
 
     if (!username || !email) {
@@ -54,12 +55,12 @@ router.post('/', requireAdmin, async (req, res) => {
     const bcrypt = require('bcryptjs');
     const passwordHash = await bcrypt.hash(rawPassword, 12);
 
-    // Create employee record; allow Name override
-    const userId = await Employee.createAuthEmployee({ Username: username, Email: email, Role: role, passwordHash, Name });
+    // Create employee record; allow Name override and Branch
+    const userId = await Employee.createAuthEmployee({ Username: username, Email: email, Role: role, passwordHash, Name, Branch });
 
     // Audit log
     const AuditLog = require('../models/AuditLog');
-    await AuditLog.record({ employeeId: userId, action: 'create', changedBy: req.user.id, changes: { username, email, role } });
+    await AuditLog.record({ employeeId: userId, action: 'create', changedBy: req.user.id, changes: { username, email, role, Branch } });
 
     // Return the generated password ONCE
     res.status(201).json({ message: 'Employee created', userId, generatedPassword: rawPassword });

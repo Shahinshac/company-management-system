@@ -1,6 +1,16 @@
 const db = require('../database/connection');
 
 class Employee {
+  static async ensureBranchColumn() {
+    try {
+      const [cols] = await db.query("SHOW COLUMNS FROM EMPLOYEE LIKE 'Branch'");
+      if (!cols || cols.length === 0) {
+        await db.query("ALTER TABLE EMPLOYEE ADD COLUMN Branch VARCHAR(100) NULL AFTER Phone");
+      }
+    } catch (err) {
+      console.warn('ensureBranchColumn warning:', err && err.message ? err.message : err);
+    }
+  }
   // Get all employees
   static async getAll() {
     const [rows] = await db.query(`
@@ -25,23 +35,25 @@ class Employee {
 
   // Create new employee
   static async create(employeeData) {
-    const { Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Photo } = employeeData;
+    const { Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch = null, Photo } = employeeData;
+    await this.ensureBranchColumn();
     const [result] = await db.query(`
-      INSERT INTO EMPLOYEE (Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Photo]);
+      INSERT INTO EMPLOYEE (Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch, Photo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch, Photo]);
     return result.insertId;
   }
 
   // Update employee
   static async update(id, employeeData) {
-    const { Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Photo } = employeeData;
+    const { Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch = null, Photo } = employeeData;
+    await this.ensureBranchColumn();
     const [result] = await db.query(`
       UPDATE EMPLOYEE 
       SET Name = ?, Gender = ?, Address = ?, Dob = ?, Doj = ?, 
-          Department_No = ?, Since = ?, Salary = ?, Email = ?, Phone = ?, Photo = ?
+          Department_No = ?, Since = ?, Salary = ?, Email = ?, Phone = ?, Branch = ?, Photo = ?
       WHERE Id = ?
-    `, [Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Photo, id]);
+    `, [Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch, Photo, id]);
     return result.affectedRows;
   }
 
@@ -119,14 +131,15 @@ class Employee {
   }
 
   // Create employee with authentication fields (used by admin to create accounts)
-  static async createAuthEmployee({ Username, Email, Role = 'Employee', passwordHash }) {
+  static async createAuthEmployee({ Username, Email, Role = 'Employee', passwordHash, Branch = null, Name: ProvidedName }) {
     // Use Username as Name if Name not provided to satisfy NOT NULL constraint
-    const Name = Username;
+    const Name = ProvidedName || Username;
+    await this.ensureBranchColumn();
     // ForcePasswordChange defaults to 1 so admins must instruct users to change on first login
     const [result] = await db.query(`
-      INSERT INTO EMPLOYEE (Name, Username, Email, Role, Password, Status, ForcePasswordChange)
-      VALUES (?, ?, ?, ?, ?, 'Active', 1)
-    `, [Name, Username, Email, Role, passwordHash]);
+      INSERT INTO EMPLOYEE (Name, Username, Email, Role, Password, Branch, Status, ForcePasswordChange)
+      VALUES (?, ?, ?, ?, ?, ?, 'Active', 1)
+    `, [Name, Username, Email, Role, passwordHash, Branch]);
     return result.insertId;
   }
 
@@ -173,7 +186,13 @@ class Employee {
   }
 
   static async getAllUsers() {
-    const [rows] = await db.query('SELECT Id, Name, Username, Email, Role, Status, created_at FROM EMPLOYEE ORDER BY created_at DESC');
+    const args = Array.from(arguments);
+    const branch = args[0] || null;
+    if (branch) {
+      const [rows] = await db.query('SELECT Id, Name, Username, Email, Role, Status, Branch, created_at FROM EMPLOYEE WHERE Branch = ? ORDER BY created_at DESC', [branch]);
+      return rows;
+    }
+    const [rows] = await db.query('SELECT Id, Name, Username, Email, Role, Status, Branch, created_at FROM EMPLOYEE ORDER BY created_at DESC');
     return rows;
   }
 
