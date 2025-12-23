@@ -31,6 +31,7 @@ const departmentRoutes = require('./routes/departmentRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const dependentRoutes = require('./routes/dependentRoutes');
 const configRoutes = require('./routes/configRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const { authenticateToken } = require('./middleware/authMiddleware');
 
 // Public routes (no authentication required)
@@ -43,6 +44,7 @@ app.use('/api/employees', authenticateToken, employeeRoutes);
 app.use('/api/departments', authenticateToken, departmentRoutes);
 app.use('/api/projects', authenticateToken, projectRoutes);
 app.use('/api/dependents', authenticateToken, dependentRoutes);
+app.use('/api/reports', authenticateToken, reportRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
