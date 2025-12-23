@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Employee = require('../models/Employee');
+const Dependent = require('../models/Dependent');
 const { authenticateToken, requireAdmin } = require('../middleware/authMiddleware');
 
 // All routes require authentication
@@ -58,7 +59,41 @@ router.post('/', requireAdmin, async (req, res) => {
     // Create employee record; allow Name override and Branch
     const userId = await Employee.createAuthEmployee({ Username: username, Email: email, Role: role, passwordHash, Name, Branch });
 
-    // Audit log
+    // If additional profile fields provided (Department_No, Phone, etc.), update them without overwriting other columns
+    const profileFields = {};
+    if (req.body.Department_No) profileFields.Department_No = req.body.Department_No;
+    if (req.body.Phone) profileFields.Phone = req.body.Phone;
+    if (req.body.Address) profileFields.Address = req.body.Address;
+    if (req.body.Dob) profileFields.Dob = req.body.Dob;
+    if (req.body.Doj) profileFields.Doj = req.body.Doj;
+    if (req.body.Salary) profileFields.Salary = req.body.Salary;
+    if (req.body.Photo) profileFields.Photo = req.body.Photo;
+    if (req.body.Gender) profileFields.Gender = req.body.Gender;
+    if (req.body.Since) profileFields.Since = req.body.Since;
+
+    if (Object.keys(profileFields).length > 0) {
+      await Employee.updatePartial(userId, profileFields);
+    }
+
+    // Handle initial project assignments (optional)
+    if (Array.isArray(req.body.projects) && req.body.projects.length > 0) {
+      await Employee.replaceProjects(userId, req.body.projects);
+      // Audit project assignment
+      const AuditLog = require('../models/AuditLog');
+      await AuditLog.record({ employeeId: userId, action: 'assign_projects', changedBy: req.user.id, changes: { projects: req.body.projects } });
+    }
+
+    // Handle dependents (optional) — replace any existing dependents for this employee
+    if (Array.isArray(req.body.dependents) && req.body.dependents.length > 0) {
+      await Dependent.deleteByEmployee(userId);
+      for (const d of req.body.dependents) {
+        await Dependent.create({ Employee_Id: userId, D_name: d.D_name, Gender: d.Gender, Relationship: d.Relationship, Date_of_Birth: d.Date_of_Birth });
+      }
+      const AuditLog = require('../models/AuditLog');
+      await AuditLog.record({ employeeId: userId, action: 'add_dependents', changedBy: req.user.id, changes: { dependentsCount: req.body.dependents.length } });
+    }
+
+    // Audit log for create
     const AuditLog = require('../models/AuditLog');
     await AuditLog.record({ employeeId: userId, action: 'create', changedBy: req.user.id, changes: { username, email, role, Branch } });
 

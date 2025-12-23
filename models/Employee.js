@@ -116,6 +116,33 @@ class Employee {
     return result.affectedRows;
   }
 
+  // Replace project assignments for an employee with provided list
+  // projects: [{ projectNo, hours, role }, ...]
+  static async replaceProjects(employeeId, projects = []) {
+    // ensure projects is array
+    if (!Array.isArray(projects)) return 0;
+
+    // Delete projects not in the provided list
+    const projectNos = projects.map(p => p.projectNo).filter(p => p != null);
+    if (projectNos.length > 0) {
+      await db.query('DELETE FROM WORKS_ON WHERE Employee_Id = ? AND Project_No NOT IN (?)', [employeeId, projectNos]);
+    } else {
+      // no projects provided -> remove all assignments
+      await db.query('DELETE FROM WORKS_ON WHERE Employee_Id = ?', [employeeId]);
+    }
+
+    // Upsert provided projects
+    for (const p of projects) {
+      const projectNo = p.projectNo || p.Project_No || p.project_no;
+      const hours = p.hours || p.Hours || 0;
+      const role = p.role || p.Role || null;
+      if (!projectNo) continue;
+      await this.assignToProject(employeeId, projectNo, hours, role);
+    }
+
+    return true;
+  }
+
   // Remove employee from project
   static async removeFromProject(employeeId, projectNo) {
     const [result] = await db.query(`
@@ -183,6 +210,22 @@ class Employee {
   static async setForcePasswordChange(id, flag = 1) {
     const [result] = await db.query('UPDATE EMPLOYEE SET ForcePasswordChange = ? WHERE Id = ?', [flag, id]);
     return result.affectedRows > 0;
+  }
+
+  // Update only provided fields (safe partial update)
+  static async updatePartial(id, fields) {
+    if (!fields || Object.keys(fields).length === 0) return 0;
+    const allowed = ['Name','Gender','Address','Dob','Doj','Department_No','Since','Salary','Email','Phone','Branch','Photo','Status','Role'];
+    const keys = Object.keys(fields).filter(k => allowed.includes(k));
+    if (keys.length === 0) return 0;
+    const sets = keys.map(k => `
+      ${k} = ?
+    `).join(',');
+    const values = keys.map(k => fields[k]);
+    values.push(id);
+    const sql = `UPDATE EMPLOYEE SET ${keys.map(k=>`${k} = ?`).join(', ')} WHERE Id = ?`;
+    const [result] = await db.query(sql, [...values.slice(0, -1), id]);
+    return result.affectedRows;
   }
 
   static async getAllUsers() {

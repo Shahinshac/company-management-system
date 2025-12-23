@@ -50,6 +50,11 @@ class Dependent {
     return result.affectedRows;
   }
 
+  static async deleteByEmployee(employeeId) {
+    const [result] = await db.query('DELETE FROM DEPENDENT WHERE Employee_Id = ?', [employeeId]);
+    return result.affectedRows;
+  }
+
   // Get dependents by employee
   static async getByEmployee(employeeId) {
     const [rows] = await db.query(`
