@@ -20,7 +20,7 @@ router.get('/', requireAdmin, async (req, res) => {
 // Create new employee (admin only)
 router.post('/', requireAdmin, async (req, res) => {
   try {
-    const { username, email, role = 'Employee' } = req.body;
+    const { username, email, role = 'Employee', Name } = req.body;
     console.log('Create user request body:', { username, email, role });
 
     if (!username || !email) {
@@ -44,16 +44,22 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(409).json({ error: 'Email already exists' });
     }
 
-    // Generate secure random password (12 chars)
+    // Generate password connected to username: prefix of username + random suffix
     const crypto = require('crypto');
-    const rawPassword = crypto.randomBytes(9).toString('base64').slice(0,12);
+    const rand = crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0,8);
+    const prefix = username.slice(0,4).replace(/[^a-zA-Z0-9]/g, '') || 'usr';
+    const rawPassword = `${prefix}-${rand}`;
 
     // Hash the password
     const bcrypt = require('bcryptjs');
     const passwordHash = await bcrypt.hash(rawPassword, 12);
 
-    // Create employee record
-    const userId = await Employee.createAuthEmployee({ Username: username, Email: email, Role: role, passwordHash });
+    // Create employee record; allow Name override
+    const userId = await Employee.createAuthEmployee({ Username: username, Email: email, Role: role, passwordHash, Name });
+
+    // Audit log
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.record({ employeeId: userId, action: 'create', changedBy: req.user.id, changes: { username, email, role } });
 
     // Return the generated password ONCE
     res.status(201).json({ message: 'Employee created', userId, generatedPassword: rawPassword });
@@ -91,7 +97,13 @@ router.post('/:id/reset-password', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const crypto = require('crypto');
-    const rawPassword = crypto.randomBytes(9).toString('base64').slice(0,12);
+    // match create behavior: username-based prefix + random suffix
+    const user = await Employee.getById(id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const username = user.Username || `user${id}`;
+    const rand = crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0,8);
+    const prefix = username.slice(0,4).replace(/[^a-zA-Z0-9]/g, '') || 'usr';
+    const rawPassword = `${prefix}-${rand}`;
     const bcrypt = require('bcryptjs');
     const passwordHash = await bcrypt.hash(rawPassword, 12);
 
@@ -99,6 +111,10 @@ router.post('/:id/reset-password', requireAdmin, async (req, res) => {
     if (!success) return res.status(404).json({ error: 'User not found' });
 
     await Employee.setForcePasswordChange(id, 1);
+
+    // Audit reset
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.record({ employeeId: id, action: 'reset_password', changedBy: req.user.id, changes: { method: 'admin_reset' } });
 
     // Return password once
     res.json({ message: 'Password reset successfully', generatedPassword: rawPassword });
@@ -123,7 +139,11 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     if (!success) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
+    // Audit delete
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.record({ employeeId: id, action: 'delete', changedBy: req.user.id, changes: null });
+
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Delete user error:', error);
@@ -131,4 +151,61 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Update full employee details (admin only)
+router.put('/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = req.body; // Expect fields matching Employee.update signature
+
+    const affected = await Employee.update(id, updated);
+    if (!affected) return res.status(404).json({ error: 'User not found' });
+
+    // Audit
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.record({ employeeId: id, action: 'update', changedBy: req.user.id, changes: updated });
+
+    res.json({ message: 'User updated successfully' });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Get audit log for an employee (admin only)
+router.get('/:id/audit', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const AuditLog = require('../models/AuditLog');
+    const logs = await AuditLog.getByEmployee(id);
+    res.json({ audits: logs });
+  } catch (error) {
+    console.error('Get audit error:', error);
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+// Admin: verify a provided password for an employee (does not reveal stored password)
+router.post('/:id/check-password', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Password is required' });
+
+    const employee = await Employee.getById(id);
+    if (!employee) return res.status(404).json({ error: 'User not found' });
+
+    const match = await Employee.verifyPassword(password, employee.Password);
+
+    // Audit the check action (without storing the provided password)
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.record({ employeeId: id, action: 'password_check', changedBy: req.user.id, changes: { match } });
+
+    res.json({ match });
+  } catch (error) {
+    console.error('Check password error:', error);
+    res.status(500).json({ error: 'Failed to check password' });
+  }
+});
+
 module.exports = router;
+
