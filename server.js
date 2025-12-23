@@ -68,13 +68,18 @@ app.get('/', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    error: {
-      message: err.message || 'Internal Server Error',
-      status: err.status || 500
-    }
-  });
+  // Log full error for debugging (include stack)
+  console.error('Unhandled error:', err && err.stack ? err.stack : err);
+
+  const status = err && err.status ? err.status : 500;
+  const response = { error: { message: status === 500 ? 'Internal Server Error' : (err && err.message) || 'Error', status } };
+
+  // In non-production include details for easier debugging
+  if (process.env.NODE_ENV !== 'production') {
+    response.error.details = err && (err.message || err.stack);
+  }
+
+  res.status(status).json(response);
 });
 
 // 404 handler
@@ -86,6 +91,16 @@ app.use((req, res) => {
     }
   });
 });
+
+// Check for critical environment variables and warn
+const requiredEnvs = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME', 'JWT_SECRET'];
+const missingEnvs = requiredEnvs.filter(k => !process.env[k]);
+if (missingEnvs.length > 0) {
+  console.warn('Warning: Missing environment variables:', missingEnvs.join(', '));
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('Missing env vars in production can cause runtime failures. Please set them in your hosting provider.');
+  }
+}
 
 const PORT = process.env.PORT || 3000;
 

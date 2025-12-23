@@ -246,8 +246,14 @@
                 } else if (response.status === 400) {
                     showAlert((data && data.error) || 'Invalid request. Please check your input.', 'error');
                 } else if (response.status >= 500) {
-                    showAlert('Server error. Please try again later.', 'error');
-                    console.error('Server error response:', data);
+                    // Prefer server-provided message if available
+                    const msg = (data && data.error) ? (data.error.message || data.error) : 'Server error. Please try again later.';
+                    showAlert(msg, 'error');
+                    console.error('Server error response status:', response.status, 'body:', data);
+                    // If non-JSON body, attempt to log text
+                    if (!data) {
+                      try { const text = await response.text(); console.error('Server response text:', text); } catch(e) { }
+                    }
                 } else {
                     showAlert((data && data.error) || 'Login failed. Please try again.', 'error');
                 }

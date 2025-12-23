@@ -14,37 +14,55 @@ router.post('/login', [
   body('password').notEmpty().withMessage('Password required'),
 ], async (req, res) => {
   try {
+    const devLog = (msg, obj) => {
+      if (process.env.DEBUG_AUTH === 'true' || process.env.NODE_ENV !== 'production') {
+        if (obj) console.log(msg, obj);
+        else console.log(msg);
+      }
+    };
+
+    devLog('Login request headers:', req.headers);
+    devLog('Login request body snippet:', JSON.stringify(req.body).slice(0, 200));
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      const payload = { errors: errors.array() };
+      devLog('Responding 400:', payload);
+      return res.status(400).json(payload);
     }
 
     const { identifier, password } = req.body;
 
     // Find employee by username or email
-    console.log('Login attempt for identifier:', identifier);
+    devLog('Login attempt for identifier:', identifier);
     const employee = await Employee.findByIdentifier(identifier);
-    console.log('Employee found:', !!employee, employee ? { id: employee.Id, username: employee.Username, email: employee.Email, status: employee.Status } : null);
+    devLog('Employee found:', employee ? { id: employee.Id, username: employee.Username, email: employee.Email, status: employee.Status } : null);
     if (!employee) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      const payload = { error: 'Invalid credentials' };
+      devLog('Responding 401:', payload);
+      return res.status(401).json(payload);
     }
 
     // Check status
     if (employee.Status !== 'Active') {
-      return res.status(403).json({ error: 'Account is inactive. Contact admin.' });
+      const payload = { error: 'Account is inactive. Contact admin.' };
+      devLog('Responding 403:', payload);
+      return res.status(403).json(payload);
     }
 
     // Verify password
     const isValidPassword = await Employee.verifyPassword(password, employee.Password);
-    console.log('Password verification result for user', employee.Username, ':', isValidPassword);
+    devLog('Password verification result for user', { username: employee.Username, ok: isValidPassword });
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      const payload = { error: 'Invalid credentials' };
+      devLog('Responding 401:', payload);
+      return res.status(401).json(payload);
     }
 
     // Generate token
     const token = Employee.generateToken(employee);
 
-    res.json({
+    const payload = {
       message: 'Login successful',
       token,
       user: {
@@ -54,10 +72,15 @@ router.post('/login', [
         role: employee.Role,
         forcePasswordChange: !!employee.ForcePasswordChange
       }
-    });
+    };
+    devLog('Responding 200:', { message: payload.message, user: payload.user });
+    res.json(payload);
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Login error:', error && error.stack ? error.stack : error);
+    // Provide a safe error message and include details only in non-production
+    const resp = { error: 'Internal server error' };
+    if (process.env.NODE_ENV !== 'production') resp.details = error && (error.message || error.stack);
+    res.status(500).json(resp);
   }
 });
 
