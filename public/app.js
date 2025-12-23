@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Tab switching
-function switchTab(tabName) {
+function switchTab(tabName, ev) {
     // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
@@ -79,8 +79,16 @@ function switchTab(tabName) {
     });
     
     // Show selected tab
-    document.getElementById(tabName).classList.add('active');
-    event.target.classList.add('active');
+    const tab = document.getElementById(tabName);
+    if (tab) tab.classList.add('active');
+
+    // Set active on clicked button if available
+    try {
+        const button = ev && (ev.currentTarget || ev.target);
+        if (button && button.classList) button.classList.add('active');
+    } catch (e) {
+        // ignore
+    }
     
     // Load data for selected tab
     switch(tabName) {
