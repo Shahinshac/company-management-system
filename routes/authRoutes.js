@@ -60,6 +60,15 @@ router.post('/login', [
     }
 
     // Verify password
+    // If stored password is missing, return a helpful message (avoid ambiguous 401)
+    const hasStoredPassword = !!employee.Password;
+    devLog('Stored password present for user?', { username: employee.Username, hasStoredPassword });
+    if (!hasStoredPassword) {
+      const payload = { error: 'Account has no password set. Contact administrator to set a password.' };
+      devLog('Responding 403 (no stored password):', payload);
+      return res.status(403).json(payload);
+    }
+
     const isValidPassword = await Employee.verifyPassword(password, employee.Password);
     devLog('Password verification result for user', { username: employee.Username, ok: isValidPassword });
     if (!isValidPassword) {
