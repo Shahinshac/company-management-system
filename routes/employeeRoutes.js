@@ -132,6 +132,21 @@ router.put('/:id', validateEmployee, async (req, res) => {
     if (affectedRows === 0) {
       return res.status(404).json({ success: false, error: 'Employee not found' });
     }
+
+    // If projects array provided, replace assignments
+    if (Array.isArray(req.body.projects)) {
+      await Employee.replaceProjects(req.params.id, req.body.projects);
+    }
+
+    // If dependents provided, replace dependents
+    if (Array.isArray(req.body.dependents)) {
+      const Dependent = require('../models/Dependent');
+      await Dependent.deleteByEmployee(req.params.id);
+      for (const d of req.body.dependents) {
+        await Dependent.create({ Employee_Id: req.params.id, D_name: d.D_name, Gender: d.Gender, Relationship: d.Relationship, Date_of_Birth: d.Date_of_Birth });
+      }
+    }
+
     const employee = await Employee.getById(req.params.id);
     res.json({
       success: true,

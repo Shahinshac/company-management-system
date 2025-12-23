@@ -230,8 +230,33 @@ async function showEditEmployee(id) {
         document.getElementById('empAddress').value = emp.Address || '';
         if (emp.Dob) document.getElementById('empDob').value = emp.Dob.split('T')[0];
         if (emp.Doj) document.getElementById('empDoj').value = emp.Doj.split('T')[0];
+        document.getElementById('empBranch').value = emp.Branch || '';
         document.getElementById('empDepartment').value = emp.Department_No || '';
         document.getElementById('empSalary').value = emp.Salary || '';
+
+        // populate projects multi-select and select assigned ones
+        try {
+            const pResp = await fetch(`${API_URL}/employees/${id}/projects`, { headers: getAuthHeaders() });
+            const pData = await pResp.json();
+            const projects = (pData && pData.data) ? pData.data : [];
+            await loadProjectOptions();
+            // select assigned
+            const select = document.getElementById('empProjects');
+            Array.from(select.options).forEach(opt => { opt.selected = projects.some(p => String(p.P_No) === opt.value); });
+        } catch (e) {
+            console.error('Error loading employee projects:', e);
+        }
+
+        // populate dependents list
+        try {
+            const dResp = await fetch(`${API_URL}/employees/${id}/dependents`, { headers: getAuthHeaders() });
+            const dData = await dResp.json();
+            const deps = (dData && dData.data) ? dData.data : [];
+            document.getElementById('dependentsList').innerHTML = '';
+            deps.forEach(d => addDependentRow(d));
+        } catch (e) {
+            console.error('Error loading dependents:', e);
+        }
 
         // photo preview
         if (emp.Photo) {
@@ -280,6 +305,62 @@ function previewPhoto(event) {
     }
 }
 
+// Projects options loader
+async function loadProjectOptions() {
+    try {
+        const response = await fetch(`${API_URL}/projects`, { headers: getAuthHeaders() });
+        const data = await response.json();
+        const select = document.getElementById('empProjects');
+        if (!select) return;
+        select.innerHTML = '';
+        const projects = (data && data.data) ? data.data : [];
+        projects.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.P_No;
+            opt.textContent = `${p.Name} (${p.P_No})`;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('Error loading projects:', e);
+    }
+}
+
+// Dependents helper
+function addDependentRow(dep) {
+    const container = document.getElementById('dependentsList');
+    if (!container) return;
+    const idx = container.children.length;
+    const row = document.createElement('div');
+    row.className = 'dependent-row';
+    row.innerHTML = `
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" class="dep-name" value="${dep && dep.D_name ? dep.D_name : ''}" />
+        </div>
+        <div class="form-group">
+            <label>Gender</label>
+            <select class="dep-gender">
+                <option value="">Select</option>
+                <option value="Male" ${dep && dep.Gender === 'Male' ? 'selected' : ''}>Male</option>
+                <option value="Female" ${dep && dep.Gender === 'Female' ? 'selected' : ''}>Female</option>
+                <option value="Other" ${dep && dep.Gender === 'Other' ? 'selected' : ''}>Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Relationship</label>
+            <input type="text" class="dep-rel" value="${dep && dep.Relationship ? dep.Relationship : ''}" />
+        </div>
+        <div class="form-group">
+            <label>Date of Birth</label>
+            <input type="date" class="dep-dob" value="${dep && dep.Date_of_Birth ? (dep.Date_of_Birth.split('T')[0]) : ''}" />
+        </div>
+        <button type="button" class="btn btn-small btn-danger" onclick="this.parentElement.remove()">Remove</button>
+        <hr />
+    `;
+    container.appendChild(row);
+}
+
+
 function removePhoto() {
     currentPhotoData = null;
     document.getElementById('empPhoto').value = '';
@@ -298,10 +379,31 @@ async function saveEmployee(event) {
         Dob: document.getElementById('empDob').value || null,
         Doj: document.getElementById('empDoj').value || null,
         Department_No: document.getElementById('empDepartment').value || null,
+        Branch: document.getElementById('empBranch').value || null,
         Since: document.getElementById('empDoj').value || null,
         Salary: document.getElementById('empSalary').value || null,
         Photo: currentPhotoData || null
     };
+
+    // collect selected projects
+    const projectSelect = document.getElementById('empProjects');
+    if (projectSelect) {
+        const selected = Array.from(projectSelect.selectedOptions).map(o => ({ projectNo: o.value }));
+        if (selected.length) employeeData.projects = selected;
+    }
+
+    // collect dependents
+    const depsContainer = document.getElementById('dependentsList');
+    if (depsContainer) {
+        const rows = Array.from(depsContainer.querySelectorAll('.dependent-row'));
+        const dependents = rows.map(r => ({
+            D_name: r.querySelector('.dep-name').value,
+            Gender: r.querySelector('.dep-gender').value,
+            Relationship: r.querySelector('.dep-rel').value,
+            Date_of_Birth: r.querySelector('.dep-dob').value || null
+        })).filter(d => d.D_name && d.Gender);
+        if (dependents.length) employeeData.dependents = dependents;
+    }
     
     try {
         let response;

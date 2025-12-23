@@ -480,10 +480,31 @@
                     <input type="date" id="empDoj">
                 </div>
                 <div class="form-group">
+                    <label>Branch</label>
+                    <select id="empBranch">
+                        <option value="">Select Branch</option>
+                        <option value="kochi">Kochi</option>
+                        <option value="bengalur">Bengalur</option>
+                        <option value="dubai">Dubai</option>
+                        <option value="malappuram">Malappuram</option>
+                        <option value="hyderabad">Hyderabad</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Department</label>
                     <select id="empDepartment">
                         <option value="">Select Department</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>Projects (hold Ctrl/Cmd to select multiple)</label>
+                    <select id="empProjects" multiple style="height:120px;">
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Dependents</label>
+                    <div id="dependentsList"></div>
+                    <button type="button" class="btn btn-small" onclick="addDependentRow()">+ Add Dependent</button>
                 </div>
                 <div class="form-group">
                     <label>Salary</label>
