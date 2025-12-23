@@ -24,6 +24,15 @@ router.post('/login', [
     devLog('Login request headers:', req.headers);
     devLog('Login request body snippet:', JSON.stringify(req.body).slice(0, 200));
 
+    // Check DB connectivity early and return 503 if unavailable
+    try {
+      const db = require('../database/connection');
+      await db.query('SELECT 1');
+    } catch (dbErr) {
+      console.error('Database unavailable during login:', dbErr && dbErr.stack ? dbErr.stack : dbErr);
+      return res.status(503).json({ error: 'Service unavailable - database connection failed' });
+    }
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       const payload = { errors: errors.array() };
