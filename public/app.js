@@ -679,15 +679,35 @@ async function loadDepartmentOptions() {
 
 // Modal functions
 function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('active');
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    // If modal was dynamically created, remove it entirely and clean up handlers
+    if (modal.dataset && modal.dataset.dynamic === 'true') {
+        if (modal._escHandler) document.removeEventListener('keydown', modal._escHandler);
+        modal.remove();
+        return;
+    }
+
+    modal.classList.remove('active');
 }
 
-// Close modal when clicking outside
+// Close modal when clicking outside for statically rendered modals
 window.onclick = function(event) {
-    if (event.target.classList.contains('modal')) {
+    if (event.target.classList && event.target.classList.contains('modal')) {
         event.target.classList.remove('active');
     }
 }
+
+// Allow Esc to close statically rendered modals as well
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const staticModal = document.querySelector('.modal:not([data-dynamic="true"])');
+        if (staticModal) {
+            staticModal.classList.remove('active');
+        }
+    }
+});
 
 // USER MANAGEMENT (Admin Only)
 async function loadPendingUsers() {
@@ -787,9 +807,65 @@ async function rejectUser(userId) {
 }
 
 function openCreateEmployeeModal() {
-    document.getElementById('createEmployeeModal').classList.add('active');
-    document.getElementById('generatedPasswordBox').style.display = 'none';
-    document.getElementById('generatedPassword').textContent = '';
+    // Prevent multiple instances
+    if (document.getElementById('createEmployeeModal')) return;
+
+    const modal = document.createElement('div');
+    modal.id = 'createEmployeeModal';
+    modal.className = 'modal admin-only active';
+    modal.dataset.dynamic = 'true';
+
+    modal.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Create Employee</h3>
+          <button class="close-btn" onclick="closeModal('createEmployeeModal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="newUsername" />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="newEmail" />
+          </div>
+          <div class="form-group">
+            <label>Role</label>
+            <select id="newRole">
+              <option value="Employee">Employee</option>
+              <option value="Admin">Admin</option>
+            </select>
+          </div>
+          <div id="generatedPasswordBox" style="display:none; margin-top:10px;">
+            <div class="success-message">Generated password (copy now, will not be shown again): <strong id="generatedPassword"></strong></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('createEmployeeModal')">Cancel</button>
+          <button class="btn" onclick="createEmployee()">Create Employee</button>
+        </div>
+      </div>
+    `;
+
+    // Close when clicking backdrop
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal('createEmployeeModal');
+    });
+
+    // Esc key handler
+    const escHandler = (e) => { if (e.key === 'Escape') closeModal('createEmployeeModal'); };
+    // attach handler reference so we can remove it later
+    modal._escHandler = escHandler;
+    document.addEventListener('keydown', escHandler);
+
+    document.body.appendChild(modal);
+
+    // Ensure form state is clean
+    const generatedBox = document.getElementById('generatedPasswordBox');
+    if (generatedBox) generatedBox.style.display = 'none';
+    const generated = document.getElementById('generatedPassword');
+    if (generated) generated.textContent = '';
 }
 
 async function createEmployee() {
