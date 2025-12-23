@@ -138,8 +138,16 @@ class Employee {
   }
 
   static async verifyPassword(plainPassword, hashedPassword) {
-    const bcrypt = require('bcryptjs');
-    return await bcrypt.compare(plainPassword, hashedPassword);
+    // If the stored password is missing or falsy, return false to avoid throwing in bcrypt
+    if (!hashedPassword) return false;
+
+    try {
+      const bcrypt = require('bcryptjs');
+      return await bcrypt.compare(plainPassword, hashedPassword);
+    } catch (err) {
+      console.error('Password verification error:', err);
+      return false;
+    }
   }
 
   static generateToken(employee) {

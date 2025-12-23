@@ -22,7 +22,9 @@ router.post('/login', [
     const { identifier, password } = req.body;
 
     // Find employee by username or email
+    console.log('Login attempt for identifier:', identifier);
     const employee = await Employee.findByIdentifier(identifier);
+    console.log('Employee found:', !!employee, employee ? { id: employee.Id, username: employee.Username, email: employee.Email, status: employee.Status } : null);
     if (!employee) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -34,6 +36,7 @@ router.post('/login', [
 
     // Verify password
     const isValidPassword = await Employee.verifyPassword(password, employee.Password);
+    console.log('Password verification result for user', employee.Username, ':', isValidPassword);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
