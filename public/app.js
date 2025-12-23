@@ -165,16 +165,19 @@ async function loadEmployees() {
                 const photoHtml = emp.Photo 
                     ? `<img src="${emp.Photo}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;" alt="${emp.Name}">` 
                     : '<div style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; font-size: 18px;">👤</div>';
+                const isAdmin = emp.Role === 'Admin';
+                const rowClass = isAdmin ? 'class="admin-row"' : '';
+                const roleCell = isAdmin ? `<span class="badge-admin">Admin</span>` : (emp.Role || 'Employee');
                 
                 html += `
-                    <tr>
+                    <tr ${rowClass}>
                         <td>${photoHtml}</td>
                         <td>${emp.Id}</td>
                         <td>${emp.Name}</td>
                         <td>${emp.Email || 'N/A'}</td>
                         <td>${emp.Phone || 'N/A'}</td>
                         <td>${emp.Department_Name || 'N/A'}</td>
-                        <td>${emp.Role || 'Employee'}</td>
+                        <td>${roleCell}</td>
                         <td>$${emp.Salary ? parseFloat(emp.Salary).toFixed(2) : '0.00'}</td>
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewEmployee(${emp.Id})">View</button>
@@ -597,6 +600,11 @@ async function loadDepartments() {
         const data = await response.json();
         
         if (data.success && data.data.length > 0) {
+            const q = document.getElementById('deptSearch') ? document.getElementById('deptSearch').value.trim().toLowerCase() : '';
+            let items = data.data;
+            if (q) items = items.filter(d => (d.Name && d.Name.toLowerCase().includes(q)) || (String(d.D_No || '').includes(q)) );
+            if (items.length === 0) { container.innerHTML = '<p>No departments found.</p>'; return; }
+
             let html = `
                 <table>
                     <thead>
@@ -613,7 +621,7 @@ async function loadDepartments() {
                     <tbody>
             `;
             
-            data.data.forEach(dept => {
+            items.forEach(dept => {
                 html += `
                     <tr>
                         <td>${dept.D_No}</td>
@@ -624,6 +632,7 @@ async function loadDepartments() {
                         <td>${dept.Project_Count}</td>
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewDepartment('${dept.D_No}')">View</button>
+                            <button class="btn btn-small" onclick="showEditDepartment('${dept.D_No}')">Edit</button>
                             <button class="btn btn-small btn-danger" onclick="deleteDepartment('${dept.D_No}')">Delete</button>
                         </td>
                     </tr>
@@ -672,7 +681,7 @@ async function deleteDepartment(dNo) {
     if (!confirm('Are you sure you want to delete this department?')) return;
     
     try {
-        const response = await fetch(`${API_URL}/departments/${dNo}`, { method: 'DELETE' });
+        const response = await fetch(`${API_URL}/departments/${dNo}`, { method: 'DELETE', headers: getAuthHeaders() });
         const data = await response.json();
         
         if (data.success) {
@@ -680,7 +689,7 @@ async function deleteDepartment(dNo) {
             loadDashboardStats();
             alert('Department deleted successfully!');
         } else {
-            alert('Error: ' + data.error);
+            alert('Error: ' + (data.error || 'Delete failed'));
         }
     } catch (error) {
         alert('Error deleting department');
@@ -689,7 +698,190 @@ async function deleteDepartment(dNo) {
 }
 
 function showAddDepartmentModal() {
-    alert('Add Department functionality - Implement modal similar to employee');
+    // open modal and set to create mode
+    document.getElementById('departmentModalTitle').textContent = 'Add Department';
+    document.getElementById('departmentForm').reset();
+    document.getElementById('deptNo').disabled = false;
+    document.getElementById('departmentModal').classList.add('active');
+}
+
+async function showEditDepartment(dNo) {
+    try {
+        const resp = await fetch(`${API_URL}/departments/${dNo}`);
+        const data = await resp.json();
+        if (!data.success) { alert('Department not found'); return; }
+        const dept = data.data;
+        document.getElementById('departmentModalTitle').textContent = 'Edit Department';
+        document.getElementById('deptNo').value = dept.D_No;
+        document.getElementById('deptNo').disabled = true;
+        document.getElementById('deptName').value = dept.Name || '';
+        document.getElementById('deptLocation').value = dept.Location || '';
+        document.getElementById('departmentModal').classList.add('active');
+    } catch (err) {
+        console.error('Error loading department:', err);
+        alert('Failed to load department');
+    }
+}
+
+async function saveDepartment(e) {
+    e.preventDefault();
+    const dNo = document.getElementById('deptNo').value.trim();
+    const name = document.getElementById('deptName').value.trim();
+    const location = document.getElementById('deptLocation').value.trim();
+    if (!dNo || !name) { alert('Dept No and Name are required'); return; }
+
+    try {
+        const payload = { D_No: dNo, Name: name, Location: location };
+        const method = document.getElementById('deptNo').disabled ? 'PUT' : 'POST';
+        const url = method === 'POST' ? `${API_URL}/departments` : `${API_URL}/departments/${dNo}`;
+        const resp = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        const data = await resp.json();
+        if (resp.ok) {
+            closeModal('departmentModal');
+            loadDepartments();
+            loadDashboardStats();
+            alert('Department saved');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to save')); 
+        }
+    } catch (err) {
+        console.error('Save department error:', err);
+        alert('Failed to save department');
+    }
+}
+
+async async function showAddProjectModal() {
+    document.getElementById('projectModalTitle').textContent = 'Add Project';
+    document.getElementById('projectForm').reset();
+    document.getElementById('projNo').disabled = false;
+    // populate department select
+    try {
+        const resp = await fetch(`${API_URL}/departments`);
+        const data = await resp.json();
+        const sel = document.getElementById('projDepartment');
+        sel.innerHTML = '<option value="">Select Department</option>';
+        if (data.success) data.data.forEach(d => { const o = document.createElement('option'); o.value = d.D_No; o.textContent = d.Name; sel.appendChild(o); });
+    } catch (e) { console.error(e); }
+    document.getElementById('projectModal').classList.add('active');
+}
+
+async function showEditProject(pNo) {
+    try {
+        const resp = await fetch(`${API_URL}/projects/${pNo}`);
+        const data = await resp.json();
+        if (!data.success) { alert('Project not found'); return; }
+        const proj = data.data;
+        document.getElementById('projectModalTitle').textContent = 'Edit Project';
+        document.getElementById('projNo').value = proj.P_No;
+        document.getElementById('projNo').disabled = true;
+        document.getElementById('projName').value = proj.Name || '';
+        document.getElementById('projLocation').value = proj.Location || '';
+        // populate department select
+        const dResp = await fetch(`${API_URL}/departments`);
+        const dData = await dResp.json();
+        const sel = document.getElementById('projDepartment');
+        sel.innerHTML = '<option value="">Select Department</option>';
+        if (dData.success) dData.data.forEach(d => { const o = document.createElement('option'); o.value = d.D_No; o.textContent = d.Name; if (String(d.D_No) === String(proj.Department_No)) o.selected = true; sel.appendChild(o); });
+        document.getElementById('projectModal').classList.add('active');
+    } catch (e) {
+        console.error('Error loading project:', e);
+        alert('Failed to load project');
+    }
+}
+
+async function saveProject(e) {
+    e.preventDefault();
+    const pNo = document.getElementById('projNo').value.trim();
+    const name = document.getElementById('projName').value.trim();
+    const dept = document.getElementById('projDepartment').value || null;
+    const loc = document.getElementById('projLocation').value.trim() || null;
+    if (!pNo || !name) { alert('Project number and name are required'); return; }
+
+    try {
+        const payload = { Name: name, Department_No: dept, Location: loc };
+        let resp;
+        if (document.getElementById('projNo').disabled) {
+            // update existing project
+            resp = await fetch(`${API_URL}/projects/${pNo}`, { method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        } else {
+            // create new project
+            payload.P_No = pNo;
+            resp = await fetch(`${API_URL}/projects`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        }
+        const data = await resp.json();
+        if (resp.ok) {
+            closeModal('projectModal');
+            loadProjects();
+            loadDashboardStats();
+            alert('Project added');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to add')); 
+        }
+    } catch (err) {
+        console.error('Save project error:', err);
+        alert('Failed to save project');
+    }
+}
+
+function showAddDependentModal() {
+    document.getElementById('dependentModalTitle').textContent = 'Add Dependent';
+    document.getElementById('dependentForm').reset();
+    // populate employee select
+    fetch(`${API_URL}/employees`, { headers: getAuthHeaders() }).then(r => r.json()).then(data => {
+        const sel = document.getElementById('depEmployee');
+        sel.innerHTML = '';
+        if (data && data.data) {
+            data.data.forEach(e => {
+                const o = document.createElement('option'); o.value = e.Id; o.textContent = `${e.Name} (${e.Username || e.Id})`; sel.appendChild(o);
+            });
+        }
+        document.getElementById('dependentModal').classList.add('active');
+    }).catch(err => { console.error('Error loading employees for dependent:', err); document.getElementById('dependentModal').classList.add('active'); });
+}
+
+async function saveDependent(e) {
+    e.preventDefault();
+    const employeeId = document.getElementById('depEmployee').value;
+    const name = document.getElementById('depName').value.trim();
+    const gender = document.getElementById('depGender').value;
+    const rel = document.getElementById('depRel').value.trim();
+    const dob = document.getElementById('depDob').value || null;
+    if (!employeeId || !name) { alert('Employee and Name are required'); return; }
+
+    try {
+        const payload = { Employee_Id: employeeId, D_name: name, Gender: gender, Relationship: rel, Date_of_Birth: dob };
+        const resp = await fetch(`${API_URL}/dependents`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        const data = await resp.json();
+        if (resp.ok) {
+            closeModal('dependentModal');
+            loadDependents();
+            loadDashboardStats();
+            alert('Dependent added');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to add')); 
+        }
+    } catch (err) {
+        console.error('Save dependent error:', err);
+        alert('Failed to save dependent');
+    }
+}
+
+async function deleteDependent(id) {
+    if (!confirm('Are you sure you want to delete this dependent?')) return;
+    try {
+        const response = await fetch(`${API_URL}/dependents/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+        const data = await response.json();
+        if (response.ok) {
+            loadDependents();
+            loadDashboardStats();
+            alert('Dependent deleted successfully!');
+        } else {
+            alert('Error: ' + (data.error || 'Failed'));
+        }
+    } catch (error) {
+        alert('Error deleting dependent');
+        console.error('Error:', error);
+    }
 }
 
 async function deleteUserAccount(userId) {
@@ -722,6 +914,11 @@ async function loadProjects() {
         const data = await response.json();
         
         if (data.success && data.data.length > 0) {
+            const q = document.getElementById('projSearch') ? document.getElementById('projSearch').value.trim().toLowerCase() : '';
+            let items = data.data;
+            if (q) items = items.filter(p => (p.Name && p.Name.toLowerCase().includes(q)) || (String(p.P_No || '').includes(q)) );
+            if (items.length === 0) { container.innerHTML = '<p>No projects found.</p>'; return; }
+
             let html = `
                 <table>
                     <thead>
@@ -738,8 +935,8 @@ async function loadProjects() {
                     <tbody>
             `;
             
-            data.data.forEach(proj => {
-                const statusClass = proj.Status.toLowerCase().replace(' ', '-');
+            items.forEach(proj => {
+                const statusClass = (proj.Status || '').toLowerCase().replace(' ', '-');
                 html += `
                     <tr>
                         <td>${proj.P_No}</td>
@@ -750,6 +947,7 @@ async function loadProjects() {
                         <td><span class="badge badge-${statusClass}">${proj.Status}</span></td>
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewProject('${proj.P_No}')">View</button>
+                            <button class="btn btn-small" onclick="showEditProject('${proj.P_No}')">Edit</button>
                             <button class="btn btn-small btn-danger" onclick="deleteProject('${proj.P_No}')">Delete</button>
                         </td>
                     </tr>
@@ -801,7 +999,7 @@ async function deleteProject(pNo) {
     if (!confirm('Are you sure you want to delete this project?')) return;
     
     try {
-        const response = await fetch(`${API_URL}/projects/${pNo}`, { method: 'DELETE' });
+        const response = await fetch(`${API_URL}/projects/${pNo}`, { method: 'DELETE', headers: getAuthHeaders() });
         const data = await response.json();
         
         if (data.success) {
@@ -831,6 +1029,11 @@ async function loadDependents() {
         const data = await response.json();
         
         if (data.success && data.data.length > 0) {
+            const q = document.getElementById('depSearch') ? document.getElementById('depSearch').value.trim().toLowerCase() : '';
+            let items = data.data;
+            if (q) items = items.filter(d => (d.D_name && d.D_name.toLowerCase().includes(q)) || (String(d.Id || '').includes(q)) || (d.Employee_Name && d.Employee_Name.toLowerCase().includes(q)) );
+            if (items.length === 0) { container.innerHTML = '<p>No dependents found.</p>'; return; }
+
             let html = `
                 <table>
                     <thead>
@@ -846,7 +1049,7 @@ async function loadDependents() {
                     <tbody>
             `;
             
-            data.data.forEach(dep => {
+            items.forEach(dep => {
                 html += `
                     <tr>
                         <td>${dep.Id}</td>
@@ -876,7 +1079,7 @@ async function deleteDependent(id) {
     if (!confirm('Are you sure you want to delete this dependent?')) return;
     
     try {
-        const response = await fetch(`${API_URL}/dependents/${id}`, { method: 'DELETE' });
+        const response = await fetch(`${API_URL}/dependents/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
         const data = await response.json();
         
         if (data.success) {
