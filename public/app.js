@@ -822,6 +822,7 @@ function openCreateEmployeeModal() {
           <button class="close-btn" onclick="closeModal('createEmployeeModal')">✕</button>
         </div>
         <div class="modal-body">
+          <div id="createEmployeeError" class="error-message" style="display:none;"></div>
           <div class="form-group">
             <label>Username</label>
             <input type="text" id="newUsername" />
@@ -843,7 +844,7 @@ function openCreateEmployeeModal() {
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal('createEmployeeModal')">Cancel</button>
-          <button class="btn" onclick="createEmployee()">Create Employee</button>
+          <button id="createEmployeeBtn" class="btn" onclick="createEmployee()">Create Employee</button>
         </div>
       </div>
     `;
@@ -869,38 +870,77 @@ function openCreateEmployeeModal() {
 }
 
 async function createEmployee() {
-    const username = document.getElementById('newUsername').value.trim();
-    const email = document.getElementById('newEmail').value.trim();
-    const role = document.getElementById('newRole').value;
+    const usernameEl = document.getElementById('newUsername');
+    const emailEl = document.getElementById('newEmail');
+    const roleEl = document.getElementById('newRole');
+    const errorBox = document.getElementById('createEmployeeError');
+    const createBtn = document.getElementById('createEmployeeBtn');
+
+    const username = usernameEl.value.trim();
+    const email = emailEl.value.trim();
+    const role = roleEl.value;
+
+    // simple email regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    errorBox.style.display = 'none';
+    errorBox.textContent = '';
 
     if (!username || !email) {
-        alert('Username and email are required');
+        errorBox.style.display = 'block';
+        errorBox.textContent = 'Username and email are required';
+        return;
+    }
+    if (!emailRegex.test(email)) {
+        errorBox.style.display = 'block';
+        errorBox.textContent = 'Please enter a valid email address';
         return;
     }
 
     try {
+        createBtn.disabled = true;
+        createBtn.textContent = 'Creating...';
+
         const response = await fetch(`${API_URL}/users`, {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify({ username, email, role })
         });
 
-        const data = await response.json();
-        if (response.ok) {
-            // Show generated password once
+        let data = null;
+        try { data = await response.json(); } catch (e) { data = null; }
+
+        if (response.status === 201 && data && data.generatedPassword) {
             document.getElementById('generatedPassword').textContent = data.generatedPassword;
             document.getElementById('generatedPasswordBox').style.display = 'block';
-            // clear inputs
-            document.getElementById('newUsername').value = '';
-            document.getElementById('newEmail').value = '';
-            // Reload user list
+            // disable inputs to prevent further edits
+            usernameEl.value = '';
+            emailEl.value = '';
+            // reload users list in background
             setTimeout(() => { loadPendingUsers(); }, 1000);
+        } else if (response.status === 400) {
+            errorBox.style.display = 'block';
+            errorBox.textContent = (data && data.error) || 'Invalid input';
+        } else if (response.status === 401 || response.status === 403) {
+            errorBox.style.display = 'block';
+            errorBox.textContent = (data && data.error) || 'Authentication required';
+        } else if (response.status >= 500) {
+            errorBox.style.display = 'block';
+            errorBox.textContent = (data && data.error) || 'Server error. Try again later.';
+            console.error('Create employee server error:', response.status, data);
         } else {
-            alert('Error: ' + (data.error || 'Failed to create employee'));
+            errorBox.style.display = 'block';
+            errorBox.textContent = (data && data.error) || 'Failed to create employee';
         }
     } catch (error) {
         console.error('Error creating employee:', error);
-        alert('Failed to create employee');
+        errorBox.style.display = 'block';
+        errorBox.textContent = 'Network or server error. Check console for details.';
+    } finally {
+        if (createBtn) {
+            createBtn.disabled = false;
+            createBtn.textContent = 'Create Employee';
+        }
     }
 }
 
