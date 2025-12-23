@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Company Management System</title>
+    <title>26:07</title>
     <style>
         * {
             margin: 0;
@@ -377,7 +377,7 @@
     <div class="container">
         <header>
             <div class="header-left">
-                <h1 id="companyName">🏢 Company Management System</h1>
+                <h1 id="companyName">26:07</h1>
                 <p class="subtitle" id="companySubtitle">Professional multi-branch company management solution</p>
             </div>
             <div class="header-right">
@@ -412,51 +412,24 @@
             </div>
         </div>
 
-        <!-- Tab Navigation -->
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('employees')">👥 Employees</button>
-            <button class="tab-btn" onclick="switchTab('departments')">🏬 Departments</button>
-            <button class="tab-btn" onclick="switchTab('projects')">📊 Projects</button>
-            <button class="tab-btn" onclick="switchTab('dependents')">👨‍👩‍👧‍👦 Dependents</button>
-        </div>
-
-        <!-- Employees Tab -->
-        <div id="employees" class="tab-content active">
-            <div class="action-bar">
-                <div class="search-box">
-                    <input type="text" id="employeeSearch" placeholder="Search employees..." onkeyup="searchEmployees()">
-                </div>
+        <!-- Employees Dashboard (single table) -->
+        <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <div style="flex:1; min-width:200px;">
+                <input type="text" id="employeeSearch" placeholder="Search employees..." onkeyup="searchEmployees()" style="width:100%; padding:10px; border-radius:8px; border:2px solid #e0e0e0;">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <select id="branchFilter" onchange="filterByBranch()" style="padding:10px; border-radius:8px; border:2px solid #e0e0e0;">
+                    <option value="">All Branches</option>
+                    <option value="kochi">Kochi</option>
+                    <option value="bengalur">Bengalur</option>
+                    <option value="dubai">Dubai</option>
+                    <option value="malappuram">Malappuram</option>
+                    <option value="hyderabad">Hyderabad</option>
+                </select>
                 <button class="btn" onclick="showAddEmployeeModal()">+ Add Employee</button>
             </div>
-            <div id="employeesTable"></div>
         </div>
-
-        <!-- Departments Tab -->
-        <div id="departments" class="tab-content">
-            <div class="action-bar">
-                <h2>Departments</h2>
-                <button class="btn" onclick="showAddDepartmentModal()">+ Add Department</button>
-            </div>
-            <div id="departmentsTable"></div>
-        </div>
-
-        <!-- Projects Tab -->
-        <div id="projects" class="tab-content">
-            <div class="action-bar">
-                <h2>Projects</h2>
-                <button class="btn" onclick="showAddProjectModal()">+ Add Project</button>
-            </div>
-            <div id="projectsTable"></div>
-        </div>
-
-        <!-- Dependents Tab -->
-        <div id="dependents" class="tab-content">
-            <div class="action-bar">
-                <h2>Dependents</h2>
-                <button class="btn" onclick="showAddDependentModal()">+ Add Dependent</button>
-            </div>
-            <div id="dependentsTable"></div>
-        </div>
+        <div id="employeesTable"></div>
     </div>
 
     <!-- Modal for Add/Edit Employee -->

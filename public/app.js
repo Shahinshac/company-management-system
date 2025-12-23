@@ -122,14 +122,25 @@ async function loadDashboardStats() {
 
 // EMPLOYEES
 async function loadEmployees() {
+    // allow optional branch or search via global inputs
     const container = document.getElementById('employeesTable');
     container.innerHTML = '<div class="loading">Loading employees...</div>';
     
     try {
-        const response = await fetch(`${API_URL}/employees`, { headers: getAuthHeaders() });
+        const branch = document.getElementById('branchFilter') ? document.getElementById('branchFilter').value : '';
+        const search = document.getElementById('employeeSearch') ? document.getElementById('employeeSearch').value : '';
+        let url = `${API_URL}/employees`;
+        const params = [];
+        if (branch) params.push(`branch=${encodeURIComponent(branch)}`);
+        if (search && search.length >= 2) params.push(`q=${encodeURIComponent(search)}`);
+        if (params.length) url += '?' + params.join('&');
+
+        const response = await fetch(url, { headers: getAuthHeaders() });
         const data = await response.json();
         
-        if (data.success && data.data.length > 0) {
+        // support backend that returns an array or { success, data }
+        const items = (data && data.data) ? data.data : (Array.isArray(data) ? data : []);
+        if (items && items.length > 0) {
             let html = `
                 <table>
                     <thead>
@@ -147,7 +158,7 @@ async function loadEmployees() {
                     <tbody>
             `;
             
-            data.data.forEach(emp => {
+            items.forEach(emp => {
                 const photoHtml = emp.Photo 
                     ? `<img src="${emp.Photo}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;" alt="${emp.Name}">` 
                     : '<div style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; font-size: 18px;">👤</div>';
@@ -181,45 +192,12 @@ async function loadEmployees() {
 }
 
 async function searchEmployees() {
-    const searchTerm = document.getElementById('employeeSearch').value;
-    if (searchTerm.length < 2) {
-        loadEmployees();
-        return;
-    }
-    
-    const container = document.getElementById('employeesTable');
-    try {
-        const response = await fetch(`${API_URL}/employees/search?q=${encodeURIComponent(searchTerm)}`, { headers: getAuthHeaders() });
-        const data = await response.json();
-        
-        if (data.success && data.data.length > 0) {
-            let html = `<table><thead><tr><th>Photo</th><th>ID</th><th>Name</th><th>Email</th><th>Department</th><th>Actions</th></tr></thead><tbody>`;
-            data.data.forEach(emp => {
-                const photoHtml = emp.Photo 
-                    ? `<img src="${emp.Photo}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;" alt="${emp.Name}">` 
-                    : '<div style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; font-size: 18px;">👤</div>';
-                
-                html += `
-                    <tr>
-                        <td>${photoHtml}</td>
-                        <td>${emp.Id}</td>
-                        <td>${emp.Name}</td>
-                        <td>${emp.Email || 'N/A'}</td>
-                        <td>${emp.Department_Name || 'N/A'}</td>
-                        <td>
-                            <button class="btn btn-small btn-secondary" onclick="viewEmployee(${emp.Id})">View</button>
-                        </td>
-                    </tr>
-                `;
-            });
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = '<p>No results found.</p>';
-        }
-    } catch (error) {
-        console.error('Error:', error);
-    }
+    // Use loadEmployees which already considers the search input
+    loadEmployees();
+}
+
+function filterByBranch() {
+    loadEmployees();
 }
 
 function showAddEmployeeModal() {

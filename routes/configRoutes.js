@@ -3,7 +3,7 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   const base = {
-    companyName: process.env.COMPANY_NAME || 'Company Management System'
+    companyName: process.env.COMPANY_NAME || '26:07'
   };
 
   // Expose non-sensitive diagnostic flags when DEBUG_AUTH is enabled
