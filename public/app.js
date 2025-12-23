@@ -913,10 +913,39 @@ async function createEmployee() {
         if (response.status === 201 && data && data.generatedPassword) {
             document.getElementById('generatedPassword').textContent = data.generatedPassword;
             document.getElementById('generatedPasswordBox').style.display = 'block';
-            // disable inputs to prevent further edits
+            // add copy button and done button
+            const generatedBox = document.getElementById('generatedPasswordBox');
+            if (!document.getElementById('copyGeneratedPassword')) {
+                const copyBtn = document.createElement('button');
+                copyBtn.id = 'copyGeneratedPassword';
+                copyBtn.className = 'btn';
+                copyBtn.style.marginLeft = '10px';
+                copyBtn.textContent = 'Copy';
+                copyBtn.onclick = async () => {
+                    try {
+                        await navigator.clipboard.writeText(data.generatedPassword);
+                        copyBtn.textContent = 'Copied!';
+                        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+                    } catch (e) {
+                        console.error('Clipboard error:', e);
+                        alert('Unable to copy to clipboard');
+                    }
+                };
+                generatedBox.appendChild(copyBtn);
+            }
+            if (!document.getElementById('doneGeneratedPassword')) {
+                const doneBtn = document.createElement('button');
+                doneBtn.id = 'doneGeneratedPassword';
+                doneBtn.className = 'btn btn-secondary';
+                doneBtn.style.marginLeft = '10px';
+                doneBtn.textContent = 'Done';
+                doneBtn.onclick = () => { closeModal('createEmployeeModal'); loadPendingUsers(); };
+                generatedBox.appendChild(doneBtn);
+            }
+            // clear inputs
             usernameEl.value = '';
             emailEl.value = '';
-            // reload users list in background
+            // reload user list in background (ensure new user appears)
             setTimeout(() => { loadPendingUsers(); }, 1000);
         } else if (response.status === 400) {
             errorBox.style.display = 'block';

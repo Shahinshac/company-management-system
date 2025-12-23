@@ -120,10 +120,13 @@ class Employee {
 
   // Create employee with authentication fields (used by admin to create accounts)
   static async createAuthEmployee({ Username, Email, Role = 'Employee', passwordHash }) {
+    // Use Username as Name if Name not provided to satisfy NOT NULL constraint
+    const Name = Username;
+    // ForcePasswordChange defaults to 1 so admins must instruct users to change on first login
     const [result] = await db.query(`
-      INSERT INTO EMPLOYEE (Username, Email, Role, Password, Status)
-      VALUES (?, ?, ?, ?, 'Active')
-    `, [Username, Email, Role, passwordHash]);
+      INSERT INTO EMPLOYEE (Name, Username, Email, Role, Password, Status, ForcePasswordChange)
+      VALUES (?, ?, ?, ?, ?, 'Active', 1)
+    `, [Name, Username, Email, Role, passwordHash]);
     return result.insertId;
   }
 

@@ -26,12 +26,21 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Username and email are required' });
     }
 
+    // Basic username/email validation
+    if (username.length < 3 || username.length > 50) {
+      return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+
     // Prevent duplicates
     if (await Employee.usernameExists(username)) {
-      return res.status(400).json({ error: 'Username already exists' });
+      return res.status(409).json({ error: 'Username already exists' });
     }
     if (await Employee.emailExists(email)) {
-      return res.status(400).json({ error: 'Email already exists' });
+      return res.status(409).json({ error: 'Email already exists' });
     }
 
     // Generate secure random password (12 chars)
