@@ -59,7 +59,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.admin-only').forEach(el => {
             el.style.display = 'block';
         });
-        loadPendingUsers();
     }
     
     loadDashboardStats();
@@ -175,6 +174,7 @@ async function loadEmployees() {
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewEmployee(${emp.Id})">View</button>
                             <button class="btn btn-small" onclick="showEditEmployee(${emp.Id})">Edit</button>
+                            <button class="btn btn-small btn-danger" onclick="deleteEmployee(${emp.Id})">Delete</button>
                         </td>
                     </tr>
                 `;
@@ -345,12 +345,12 @@ async function deleteEmployee(id) {
         const response = await fetch(`${API_URL}/employees/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
         const data = await response.json();
         
-        if (data.success) {
+        if (response.ok) {
             loadEmployees();
             loadDashboardStats();
             alert('Employee deleted successfully!');
         } else {
-            alert('Error: ' + data.error);
+            alert('Error: ' + (data && data.error ? data.error : 'Failed to delete'));
         }
     } catch (error) {
         alert('Error deleting employee');
@@ -741,102 +741,8 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// USER MANAGEMENT (Admin Only)
-async function loadPendingUsers() {
-    const container = document.getElementById('pendingUsersTable');
-    if (!container) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/users`, {
-            headers: getAuthHeaders()
-        });
-        const users = await response.json();
-        
-        if (users.length > 0) {
-            let html = `
-                <h3>Employees</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Username</th>
-                            <th>Email</th>
-                            <th>Role</th>
-                            <th>Status</th>
-                            <th>Created</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            
-            users.forEach(user => {
-                html += `
-                    <tr>
-                        <td>${user.Username || ''}</td>
-                        <td>${user.Email || ''}</td>
-                        <td>${user.Role || 'Employee'}</td>
-                        <td>${user.Status || 'Active'}</td>
-                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
-                        <td>
-                            <button class="btn btn-small btn-danger" onclick="deleteUserAccount(${user.Id})">Delete</button>
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = '<p>No employees found</p>';
-        }
-    } catch (error) {
-        console.error('Error loading employees:', error);
-    }
-}
-
-async function approveUser(userId) {
-    try {
-        const response = await fetch(`${API_URL}/users/${userId}/approve`, {
-            method: 'PATCH',
-            headers: getAuthHeaders()
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            alert('User approved successfully!');
-            loadPendingUsers();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    } catch (error) {
-        console.error('Error approving user:', error);
-        alert('Failed to approve user');
-    }
-}
-
-async function rejectUser(userId) {
-    if (!confirm('Are you sure you want to reject this user?')) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/users/${userId}/reject`, {
-            method: 'PATCH',
-            headers: getAuthHeaders()
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            alert('User rejected');
-            loadPendingUsers();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    } catch (error) {
-        console.error('Error rejecting user:', error);
-        alert('Failed to reject user');
-    }
-}
+// Admin user list removed — using single employees dashboard
+// (Pending user approval UI removed to simplify the admin interface.)
 
 function openCreateEmployeeModal() {
     // Prevent multiple instances
@@ -971,14 +877,14 @@ async function createEmployee() {
                 doneBtn.className = 'btn btn-secondary';
                 doneBtn.style.marginLeft = '10px';
                 doneBtn.textContent = 'Done';
-                doneBtn.onclick = () => { closeModal('createEmployeeModal'); loadPendingUsers(); };
+                doneBtn.onclick = () => { closeModal('createEmployeeModal'); loadEmployees(); };
                 generatedBox.appendChild(doneBtn);
             }
             // clear inputs
             usernameEl.value = '';
             emailEl.value = '';
             // reload user list in background (ensure new user appears)
-            setTimeout(() => { loadPendingUsers(); }, 1000);
+            setTimeout(() => { loadEmployees(); }, 1000);
         } else if (response.status === 400) {
             errorBox.style.display = 'block';
             errorBox.textContent = (data && data.error) || 'Invalid input';
