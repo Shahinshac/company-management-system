@@ -174,7 +174,7 @@ async function loadEmployees() {
                         <td>$${emp.Salary ? parseFloat(emp.Salary).toFixed(2) : '0.00'}</td>
                         <td>
                             <button class="btn btn-small btn-secondary" onclick="viewEmployee(${emp.Id})">View</button>
-                            <button class="btn btn-small btn-danger" onclick="deleteEmployee(${emp.Id})">Delete</button>
+                            <button class="btn btn-small" onclick="showEditEmployee(${emp.Id})">Edit</button>
                         </td>
                     </tr>
                 `;
@@ -200,11 +200,54 @@ function filterByBranch() {
     loadEmployees();
 }
 
+let editingEmployeeId = null;
+
 function showAddEmployeeModal() {
+    editingEmployeeId = null;
     document.getElementById('employeeModalTitle').textContent = 'Add New Employee';
     document.getElementById('employeeForm').reset();
     document.getElementById('photoPreview').style.display = 'none';
     document.getElementById('employeeModal').classList.add('active');
+}
+
+async function showEditEmployee(id) {
+    try {
+        const response = await fetch(`${API_URL}/employees/${id}`, { headers: getAuthHeaders() });
+        const data = await response.json();
+        const emp = data.data || data; // handle different shapes
+
+        if (!emp) {
+            alert('Employee not found');
+            return;
+        }
+
+        editingEmployeeId = id;
+        document.getElementById('employeeModalTitle').textContent = 'Edit Employee';
+        document.getElementById('empName').value = emp.Name || '';
+        document.getElementById('empGender').value = emp.Gender || '';
+        document.getElementById('empEmail').value = emp.Email || '';
+        document.getElementById('empPhone').value = emp.Phone || '';
+        document.getElementById('empAddress').value = emp.Address || '';
+        if (emp.Dob) document.getElementById('empDob').value = emp.Dob.split('T')[0];
+        if (emp.Doj) document.getElementById('empDoj').value = emp.Doj.split('T')[0];
+        document.getElementById('empDepartment').value = emp.Department_No || '';
+        document.getElementById('empSalary').value = emp.Salary || '';
+
+        // photo preview
+        if (emp.Photo) {
+            currentPhotoData = emp.Photo;
+            document.getElementById('photoPreviewImg').src = emp.Photo;
+            document.getElementById('photoPreview').style.display = 'block';
+        } else {
+            currentPhotoData = null;
+            document.getElementById('photoPreview').style.display = 'none';
+        }
+
+        document.getElementById('employeeModal').classList.add('active');
+    } catch (error) {
+        console.error('Error loading employee for edit:', error);
+        alert('Failed to load employee');
+    }
 }
 
 // Photo handling functions
@@ -261,20 +304,31 @@ async function saveEmployee(event) {
     };
     
     try {
-        const response = await fetch(`${API_URL}/employees`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(employeeData)
-        });
+        let response;
+        if (editingEmployeeId) {
+            // update existing user via admin users endpoint
+            response = await fetch(`${API_URL}/users/${editingEmployeeId}`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(employeeData)
+            });
+        } else {
+            response = await fetch(`${API_URL}/employees`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(employeeData)
+            });
+        }
         
         const data = await response.json();
         
-        if (data.success) {
+        if (response.ok) {
             closeModal('employeeModal');
             currentPhotoData = null;
+            editingEmployeeId = null;
             loadEmployees();
             loadDashboardStats();
-            alert('Employee added successfully!');
+            alert(editingEmployeeId ? 'Employee updated successfully!' : 'Employee added successfully!');
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
         }
