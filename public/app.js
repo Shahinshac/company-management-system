@@ -547,6 +547,17 @@ async function loadReports() {
 
         html += '</tbody></table>';
         container.innerHTML = html;
+
+        // Show admin-only elements inside reports view for Admin users
+        try {
+            const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+            if (authUser && authUser.role === 'Admin') {
+                container.querySelectorAll('.admin-only').forEach(el => el.style.display = 'inline-block');
+            }
+        } catch (e) {
+            // ignore
+        }
+
     } catch (err) {
         container.innerHTML = '<p class="error-message">Failed to load reports</p>';
         console.error('Error loading reports:', err);
