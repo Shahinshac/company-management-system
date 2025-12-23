@@ -21,6 +21,7 @@ router.get('/', requireAdmin, async (req, res) => {
 router.post('/', requireAdmin, async (req, res) => {
   try {
     const { username, email, role = 'Employee' } = req.body;
+    console.log('Create user request body:', { username, email, role });
 
     if (!username || !email) {
       return res.status(400).json({ error: 'Username and email are required' });
@@ -118,52 +119,6 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     }
     
     const success = await Employee.deleteEmployee(id);
-    
-    if (!success) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({ message: 'User deleted successfully' });
-  } catch (error) {
-    console.error('Delete user error:', error);
-    res.status(500).json({ error: 'Failed to delete user' });
-  }
-});
-
-// Update user role (admin only)
-router.patch('/:id/role', requireAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { role } = req.body;
-    
-    if (!['Admin', 'Manager', 'Employee'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role' });
-    }
-    
-    const success = await User.updateRole(id, role);
-    
-    if (!success) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({ message: 'User role updated successfully' });
-  } catch (error) {
-    console.error('Update role error:', error);
-    res.status(500).json({ error: 'Failed to update user role' });
-  }
-});
-
-// Delete user (admin only)
-router.delete('/:id', requireAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Prevent admin from deleting themselves
-    if (parseInt(id) === req.user.id) {
-      return res.status(400).json({ error: 'Cannot delete your own account' });
-    }
-    
-    const success = await User.delete(id);
     
     if (!success) {
       return res.status(404).json({ error: 'User not found' });
