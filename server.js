@@ -11,6 +11,15 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
+// Gracefully handle invalid JSON in request bodies (return 400 instead of crashing)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('Invalid JSON received:', err.message);
+    return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+  next(err);
+});
+
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
