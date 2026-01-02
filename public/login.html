@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Company Management System</title>
+    <title>26:07 - Login</title>
     <style>
         * {
             margin: 0;
@@ -11,226 +11,294 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--gradient);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            padding: 20px;
         }
 
         .login-container {
             background: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 50px 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         .login-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
         }
 
         .login-header h1 {
-            color: #667eea;
-            font-size: 1.8rem;
+            font-size: 3rem;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-bottom: 10px;
+            font-weight: 800;
         }
 
         .login-header p {
             color: #666;
-            font-size: 0.95rem;
+            font-size: 1rem;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #333;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #374151;
+            font-size: 0.95rem;
         }
 
         .form-group input {
             width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
+            padding: 14px 18px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
             font-size: 1rem;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
+            background: #f9fafb;
         }
 
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--primary);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
         }
 
         .btn {
             width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            padding: 16px;
             border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
+            border-radius: 12px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            background: var(--gradient);
+            color: white;
+            margin-top: 10px;
         }
 
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
         }
 
-        .btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none;
+        .btn:active {
+            transform: translateY(0);
         }
 
-        .message {
-            padding: 12px;
-            border-radius: 8px;
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px 15px;
+            border-radius: 10px;
             margin-bottom: 20px;
-            text-align: center;
             display: none;
+            font-size: 0.9rem;
+            text-align: center;
         }
 
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
+        .error-message.show {
             display: block;
+            animation: shake 0.5s ease;
         }
 
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            display: block;
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
         }
 
         .footer {
             text-align: center;
-            margin-top: 20px;
-            color: #666;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #9ca3af;
             font-size: 0.85rem;
         }
 
-        .demo-info {
-            background: #e7f3ff;
-            border: 1px solid #b6d4fe;
-            border-radius: 8px;
+        .footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .demo-credentials {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
             padding: 15px;
-            margin-bottom: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            text-align: center;
             font-size: 0.9rem;
         }
 
-        .demo-info strong {
-            color: #0d6efd;
+        .demo-credentials strong {
+            color: var(--primary);
         }
 
-        code {
-            background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: monospace;
+        .input-icon {
+            position: relative;
+        }
+
+        .input-icon input {
+            padding-left: 45px;
+        }
+
+        .input-icon span {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2rem;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e5e7eb;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="login-container">
         <div class="login-header">
-            <h1>🏢 Company Management</h1>
-            <p>Sign in to your account</p>
+            <h1>26:07</h1>
+            <p>Company Management System</p>
         </div>
 
-        <div class="demo-info">
-            <strong>Demo Credentials:</strong><br>
-            Username: <code>admin</code><br>
-            Password: <code>admin123</code>
+        <div class="demo-credentials">
+            Demo: <strong>admin</strong> / <strong>admin123</strong>
         </div>
 
-        <div id="message" class="message"></div>
+        <div id="errorMessage" class="error-message"></div>
 
         <form id="loginForm" onsubmit="handleLogin(event)">
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autocomplete="username">
+                <div class="input-icon">
+                    <span>👤</span>
+                    <input type="text" id="username" name="username" required 
+                           placeholder="Enter your username" autocomplete="username">
+                </div>
             </div>
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required autocomplete="current-password">
+                <div class="input-icon">
+                    <span>🔒</span>
+                    <input type="password" id="password" name="password" required 
+                           placeholder="Enter your password" autocomplete="current-password">
+                </div>
             </div>
 
-            <button type="submit" class="btn" id="loginBtn">Sign In</button>
+            <button type="submit" class="btn" id="loginBtn">
+                Sign In
+            </button>
         </form>
 
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Signing in...</p>
+        </div>
+
         <div class="footer">
-            <p>Company Management System v1.0</p>
+            <p>© 2024 26:07 Company Management</p>
         </div>
     </div>
 
     <script>
-        const API_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:3000/api' 
-            : '/api';
+        const API_URL = window.location.origin + '/api';
 
-        // Check if already logged in
-        if (localStorage.getItem('token')) {
-            window.location.href = 'index.html';
-        }
-
-        async function handleLogin(event) {
-            event.preventDefault();
-            
-            const btn = document.getElementById('loginBtn');
-            const message = document.getElementById('message');
+        async function handleLogin(e) {
+            e.preventDefault();
             
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-
-            btn.disabled = true;
-            btn.textContent = 'Signing in...';
-            message.className = 'message';
-
+            const errorDiv = document.getElementById('errorMessage');
+            const loginBtn = document.getElementById('loginBtn');
+            const loading = document.getElementById('loading');
+            const form = document.getElementById('loginForm');
+            
+            // Show loading
+            form.style.display = 'none';
+            loading.style.display = 'block';
+            errorDiv.classList.remove('show');
+            
             try {
                 const response = await fetch(`${API_URL}/auth/login`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({ username, password })
                 });
-
+                
                 const data = await response.json();
-
-                if (data.success) {
+                
+                if (response.ok && data.token) {
                     localStorage.setItem('token', data.token);
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    
-                    message.textContent = 'Login successful! Redirecting...';
-                    message.className = 'message success';
-                    
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 1000);
+                    window.location.href = '/index.html';
                 } else {
-                    message.textContent = data.error || 'Login failed';
-                    message.className = 'message error';
-                    btn.disabled = false;
-                    btn.textContent = 'Sign In';
+                    throw new Error(data.message || 'Invalid credentials');
                 }
             } catch (error) {
-                message.textContent = 'Connection error. Please try again.';
-                message.className = 'message error';
-                btn.disabled = false;
-                btn.textContent = 'Sign In';
+                form.style.display = 'block';
+                loading.style.display = 'none';
+                errorDiv.textContent = error.message || 'Login failed. Please try again.';
+                errorDiv.classList.add('show');
             }
         }
+
+        // Check if already logged in
+        if (localStorage.getItem('token')) {
+            window.location.href = '/index.html';
+        }
+
+        // Focus username input
+        document.getElementById('username').focus();
     </script>
 </body>
 </html>

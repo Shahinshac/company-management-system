@@ -22,11 +22,13 @@ async function initializeDatabase() {
     // Drop existing tables (in correct order due to foreign keys)
     console.log('Dropping existing tables...');
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+    await connection.query('DROP TABLE IF EXISTS audit_log');
+    await connection.query('DROP TABLE IF EXISTS settings');
     await connection.query('DROP TABLE IF EXISTS manages');
     await connection.query('DROP TABLE IF EXISTS works');
+    await connection.query('DROP TABLE IF EXISTS users');
     await connection.query('DROP TABLE IF EXISTS employee');
     await connection.query('DROP TABLE IF EXISTS company');
-    await connection.query('DROP TABLE IF EXISTS users');
     await connection.query('SET FOREIGN_KEY_CHECKS = 1');
 
     // Create COMPANY table
@@ -98,12 +100,52 @@ async function initializeDatabase() {
     `);
     console.log('✓ USERS table created');
 
+    // Create SETTINGS table for company configuration
+    await connection.query(`
+      CREATE TABLE settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        setting_key VARCHAR(100) UNIQUE NOT NULL,
+        setting_value TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ SETTINGS table created');
+
+    // Create AUDIT_LOG table for tracking changes
+    await connection.query(`
+      CREATE TABLE audit_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        action VARCHAR(50) NOT NULL,
+        entity_type VARCHAR(50) NOT NULL,
+        entity_id VARCHAR(100),
+        details JSON,
+        user_id INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    console.log('✓ AUDIT_LOG table created');
+
     // Create indexes for better performance
     await connection.query('CREATE INDEX idx_employee_name ON employee(emp_name)');
     await connection.query('CREATE INDEX idx_employee_city ON employee(city)');
     await connection.query('CREATE INDEX idx_company_city ON company(city)');
     await connection.query('CREATE INDEX idx_works_salary ON works(salary)');
+    await connection.query('CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id)');
+    await connection.query('CREATE INDEX idx_audit_created ON audit_log(created_at)');
     console.log('✓ Indexes created');
+
+    // Insert default settings
+    await connection.query(`
+      INSERT INTO settings (setting_key, setting_value) VALUES 
+      ('company_name', '26:07'),
+      ('company_tagline', 'Excellence in Management'),
+      ('currency', 'USD'),
+      ('currency_symbol', '$'),
+      ('date_format', 'YYYY-MM-DD')
+    `);
+    console.log('✓ Default settings inserted');
 
     // Insert sample data
     console.log('\nInserting sample data...');

@@ -21,10 +21,13 @@ const companyRoutes = require('./routes/companyRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const worksRoutes = require('./routes/worksRoutes');
 const managesRoutes = require('./routes/managesRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 const { authenticateToken } = require('./middleware/authMiddleware');
 
 // Public routes
 app.use('/api/auth', authRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Protected routes
 app.use('/api/users', userRoutes);
@@ -32,6 +35,7 @@ app.use('/api/companies', authenticateToken, companyRoutes);
 app.use('/api/employees', authenticateToken, employeeRoutes);
 app.use('/api/works', authenticateToken, worksRoutes);
 app.use('/api/manages', authenticateToken, managesRoutes);
+app.use('/api/reports', authenticateToken, reportRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

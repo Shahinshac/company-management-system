@@ -1,638 +1,690 @@
-// API Configuration
-const API_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3000/api' 
-  : '/api';
-
-// Global data storage
+// 26:07 Company Management System - Enhanced Frontend
+const API_URL = window.location.origin + '/api';
+let token = localStorage.getItem('token');
 let allCompanies = [];
 let allEmployees = [];
 let allWorks = [];
 let allManages = [];
+let settings = {};
 
-// ==================== Authentication ====================
-
+// Check authentication
 function checkAuth() {
-    const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    
     if (!token) {
-        window.location.href = 'login.html';
-        return null;
+        window.location.href = '/login.html';
+        return false;
     }
-    return { token, user };
+    return true;
 }
 
+// API helper
+async function api(endpoint, method = 'GET', data = null) {
+    const options = {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        }
+    };
+    if (data) {
+        options.body = JSON.stringify(data);
+    }
+    const response = await fetch(`${API_URL}${endpoint}`, options);
+    if (response.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login.html';
+        return;
+    }
+    return response.json();
+}
+
+// Toast notification
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast show ${type}`;
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// Format currency
+function formatCurrency(amount) {
+    const curr = settings.currency || 'USD';
+    const symbols = { USD: '$', EUR: '€', GBP: '£', INR: '₹' };
+    return `${symbols[curr] || '$'}${Number(amount || 0).toLocaleString()}`;
+}
+
+// Page navigation
+function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    
+    document.getElementById(pageId).classList.add('active');
+    event?.target?.classList.add('active') || document.querySelector(`[onclick="showPage('${pageId}')"]`).classList.add('active');
+    
+    const titles = {
+        dashboard: 'Dashboard',
+        companies: 'Companies',
+        employees: 'Employees',
+        works: 'Work Assignments',
+        manages: 'Management',
+        reports: 'Reports & Analytics',
+        settings: 'Settings'
+    };
+    document.getElementById('pageTitle').textContent = titles[pageId] || pageId;
+    
+    if (pageId === 'dashboard') loadDashboard();
+    if (pageId === 'companies') loadCompanies();
+    if (pageId === 'employees') loadEmployees();
+    if (pageId === 'works') loadWorks();
+    if (pageId === 'manages') loadManages();
+    if (pageId === 'reports') loadReports();
+    if (pageId === 'settings') loadSettings();
+}
+
+// Modal handling
+function openModal(id) {
+    document.getElementById(id).classList.add('active');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+}
+
+// Logout
 function logout() {
     localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = 'login.html';
+    window.location.href = '/login.html';
 }
 
-function getAuthHeaders() {
-    const token = localStorage.getItem('token');
-    return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-    };
-}
-
-// ==================== Initialize App ====================
-
-document.addEventListener('DOMContentLoaded', async () => {
-    const auth = checkAuth();
-    if (!auth) return;
-
-    document.getElementById('username').textContent = auth.user.username;
-    
-    await loadDashboard();
-    await loadCompanies();
-    await loadEmployees();
-    await loadWorks();
-    await loadManages();
-});
-
-// ==================== Tab Switching ====================
-
-function switchTab(tabName, btn) {
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    
-    document.getElementById(tabName).classList.add('active');
-    btn.classList.add('active');
-
-    // Refresh data when switching tabs
-    switch(tabName) {
-        case 'dashboard': loadDashboard(); break;
-        case 'companies': loadCompanies(); break;
-        case 'employees': loadEmployees(); break;
-        case 'works': loadWorks(); break;
-        case 'manages': loadManages(); break;
-    }
-}
-
-// ==================== Dashboard ====================
-
+// ===================== DASHBOARD =====================
 async function loadDashboard() {
     try {
-        const [companies, employees, works, stats] = await Promise.all([
-            fetch(`${API_URL}/companies`, { headers: getAuthHeaders() }).then(r => r.json()),
-            fetch(`${API_URL}/employees`, { headers: getAuthHeaders() }).then(r => r.json()),
-            fetch(`${API_URL}/works`, { headers: getAuthHeaders() }).then(r => r.json()),
-            fetch(`${API_URL}/works/stats`, { headers: getAuthHeaders() }).then(r => r.json())
+        const [companiesRes, employeesRes, worksRes, reportsRes] = await Promise.all([
+            api('/companies'),
+            api('/employees'),
+            api('/works'),
+            api('/reports/stats')
         ]);
-
-        document.getElementById('totalCompanies').textContent = companies.count || 0;
-        document.getElementById('totalEmployees').textContent = employees.count || 0;
-        document.getElementById('totalWorks').textContent = works.count || 0;
-
-        // Calculate average salary
-        if (stats.data && stats.data.length > 0) {
-            const totalSalary = stats.data.reduce((sum, s) => sum + parseFloat(s.total_salary || 0), 0);
-            const totalEmps = stats.data.reduce((sum, s) => sum + parseInt(s.employee_count || 0), 0);
-            const avgSalary = totalEmps > 0 ? Math.round(totalSalary / totalEmps) : 0;
-            document.getElementById('avgSalary').textContent = '$' + avgSalary.toLocaleString();
-
-            // Display salary stats
-            let statsHtml = '<h3 style="margin-bottom:15px;">Salary Statistics by Company</h3><table><thead><tr><th>Company</th><th>Employees</th><th>Min Salary</th><th>Max Salary</th><th>Avg Salary</th><th>Total</th></tr></thead><tbody>';
-            stats.data.forEach(s => {
-                statsHtml += `<tr>
-                    <td>${s.company_name}</td>
-                    <td>${s.employee_count}</td>
-                    <td>$${parseInt(s.min_salary || 0).toLocaleString()}</td>
-                    <td>$${parseInt(s.max_salary || 0).toLocaleString()}</td>
-                    <td>$${Math.round(s.avg_salary || 0).toLocaleString()}</td>
-                    <td>$${parseInt(s.total_salary || 0).toLocaleString()}</td>
-                </tr>`;
-            });
-            statsHtml += '</tbody></table>';
-            document.getElementById('salaryStats').innerHTML = statsHtml;
-        }
+        
+        allCompanies = companiesRes.data || [];
+        allEmployees = employeesRes.data || [];
+        allWorks = worksRes.data || [];
+        
+        const stats = reportsRes.data || {};
+        
+        document.getElementById('statCompanies').textContent = stats.total_companies || allCompanies.length;
+        document.getElementById('statEmployees').textContent = stats.total_employees || allEmployees.length;
+        document.getElementById('statPayroll').textContent = formatCurrency(stats.total_payroll || 0);
+        document.getElementById('statAvgSalary').textContent = formatCurrency(stats.avg_salary || 0);
+        
+        // Load company chart
+        loadCompanyChart();
+        
+        // Load top earners
+        loadTopEarners();
     } catch (error) {
-        console.error('Error loading dashboard:', error);
+        console.error('Dashboard error:', error);
     }
 }
 
-// ==================== Companies ====================
+async function loadCompanyChart() {
+    try {
+        const res = await api('/reports/salary-by-company');
+        const data = res.data || [];
+        const maxSalary = Math.max(...data.map(d => d.total_salary || 0), 1);
+        
+        const html = data.slice(0, 5).map(item => `
+            <div class="bar-item">
+                <span class="bar-label">${item.company_name || 'Unknown'}</span>
+                <div class="bar-container">
+                    <div class="bar" style="width: ${(item.total_salary / maxSalary) * 100}%"></div>
+                </div>
+                <span class="bar-value">${formatCurrency(item.total_salary)}</span>
+            </div>
+        `).join('') || '<p style="color:#666;padding:20px">No data available</p>';
+        
+        document.getElementById('companyChart').innerHTML = html;
+    } catch (error) {
+        console.error('Chart error:', error);
+    }
+}
 
+async function loadTopEarners() {
+    try {
+        const res = await api('/reports/top-earners?limit=5');
+        const data = res.data || [];
+        
+        const html = data.map(emp => `
+            <tr>
+                <td><strong>${emp.emp_name || 'Unknown'}</strong></td>
+                <td>${emp.city || '-'}</td>
+                <td>${emp.company_count || 0}</td>
+                <td><strong>${formatCurrency(emp.total_salary)}</strong></td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" class="empty-state">No employees found</td></tr>';
+        
+        document.getElementById('topEarnersTable').innerHTML = html;
+    } catch (error) {
+        console.error('Top earners error:', error);
+    }
+}
+
+// ===================== COMPANIES =====================
 async function loadCompanies() {
     try {
-        const response = await fetch(`${API_URL}/companies`, { headers: getAuthHeaders() });
-        const data = await response.json();
-        
-        if (data.success) {
-            allCompanies = data.data;
-            renderCompanies(allCompanies);
-        }
+        const res = await api('/companies');
+        allCompanies = res.data || [];
+        renderCompanies(allCompanies);
     } catch (error) {
-        console.error('Error loading companies:', error);
+        showToast('Error loading companies', 'error');
     }
 }
 
 function renderCompanies(companies) {
-    const tbody = document.getElementById('companiesTable');
-    if (companies.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No companies found</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = companies.map(c => `
+    const html = companies.map(c => `
         <tr>
-            <td>${c.company_name}</td>
-            <td>${c.city}</td>
+            <td><strong>${c.company_name}</strong></td>
+            <td>${c.city || '-'}</td>
             <td>${c.employee_count || 0}</td>
-            <td>$${c.avg_salary ? Math.round(c.avg_salary).toLocaleString() : '0'}</td>
+            <td>${formatCurrency(c.total_salary)}</td>
+            <td>${formatCurrency(c.avg_salary)}</td>
             <td class="actions">
-                <button class="btn btn-primary btn-small" onclick="editCompany('${c.company_name}')">Edit</button>
-                <button class="btn btn-danger btn-small" onclick="deleteCompany('${c.company_name}')">Delete</button>
+                <button class="btn btn-small btn-secondary" onclick="editCompany('${c.company_name}', '${c.city}')">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteCompany('${c.company_name}')">Delete</button>
             </td>
         </tr>
-    `).join('');
+    `).join('') || '<tr><td colspan="6" class="empty-state"><span>🏢</span><p>No companies found</p></td></tr>';
+    
+    document.getElementById('companiesTable').innerHTML = html;
 }
 
 function searchCompanies() {
     const search = document.getElementById('companySearch').value.toLowerCase();
     const filtered = allCompanies.filter(c => 
         c.company_name.toLowerCase().includes(search) || 
-        c.city.toLowerCase().includes(search)
+        (c.city && c.city.toLowerCase().includes(search))
     );
     renderCompanies(filtered);
 }
 
-function openCompanyModal(company = null) {
-    document.getElementById('companyModalTitle').textContent = company ? 'Edit Company' : 'Add Company';
-    document.getElementById('companyOldName').value = company ? company.company_name : '';
-    document.getElementById('companyName').value = company ? company.company_name : '';
-    document.getElementById('companyCity').value = company ? company.city : '';
-    document.getElementById('companyModal').classList.add('active');
+function openCompanyModal(name = '', city = '') {
+    document.getElementById('companyModalTitle').textContent = name ? 'Edit Company' : 'Add Company';
+    document.getElementById('companyOldName').value = name;
+    document.getElementById('companyName').value = name;
+    document.getElementById('companyCity').value = city;
+    openModal('companyModal');
 }
 
-async function editCompany(name) {
-    const company = allCompanies.find(c => c.company_name === name);
-    if (company) openCompanyModal(company);
+function editCompany(name, city) {
+    openCompanyModal(name, city);
 }
 
-async function saveCompany(event) {
-    event.preventDefault();
-    
+async function saveCompany(e) {
+    e.preventDefault();
     const oldName = document.getElementById('companyOldName').value;
     const data = {
         company_name: document.getElementById('companyName').value,
         city: document.getElementById('companyCity').value
     };
-
+    
     try {
-        const url = oldName ? `${API_URL}/companies/${encodeURIComponent(oldName)}` : `${API_URL}/companies`;
-        const method = oldName ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-            method,
-            headers: getAuthHeaders(),
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('companiesMessage', 'Company saved successfully!', 'success');
-            closeModal('companyModal');
-            loadCompanies();
+        if (oldName) {
+            await api(`/companies/${encodeURIComponent(oldName)}`, 'PUT', data);
+            showToast('Company updated successfully');
         } else {
-            showMessage('companiesMessage', result.error || 'Error saving company', 'error');
+            await api('/companies', 'POST', data);
+            showToast('Company created successfully');
         }
+        closeModal('companyModal');
+        loadCompanies();
     } catch (error) {
-        showMessage('companiesMessage', 'Error saving company', 'error');
+        showToast('Error saving company', 'error');
     }
 }
 
 async function deleteCompany(name) {
-    if (!confirm(`Delete company "${name}"? This will also delete all work relationships.`)) return;
-
+    if (!confirm(`Delete company "${name}"?`)) return;
+    
     try {
-        const response = await fetch(`${API_URL}/companies/${encodeURIComponent(name)}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('companiesMessage', 'Company deleted successfully!', 'success');
-            loadCompanies();
-        } else {
-            showMessage('companiesMessage', result.error || 'Error deleting company', 'error');
-        }
+        await api(`/companies/${encodeURIComponent(name)}`, 'DELETE');
+        showToast('Company deleted');
+        loadCompanies();
     } catch (error) {
-        showMessage('companiesMessage', 'Error deleting company', 'error');
+        showToast('Error deleting company', 'error');
     }
 }
 
-// ==================== Employees ====================
-
+// ===================== EMPLOYEES =====================
 async function loadEmployees() {
     try {
-        const response = await fetch(`${API_URL}/employees`, { headers: getAuthHeaders() });
-        const data = await response.json();
-        
-        if (data.success) {
-            allEmployees = data.data;
-            renderEmployees(allEmployees);
-            populateEmployeeDropdowns();
-        }
+        const res = await api('/employees');
+        allEmployees = res.data || [];
+        renderEmployees(allEmployees);
+        populateManagerDropdowns();
     } catch (error) {
-        console.error('Error loading employees:', error);
+        showToast('Error loading employees', 'error');
     }
 }
 
 function renderEmployees(employees) {
-    const tbody = document.getElementById('employeesTable');
-    if (employees.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No employees found</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = employees.map(e => `
+    const html = employees.map(e => `
         <tr>
             <td>${e.emp_id}</td>
-            <td>${e.emp_name}</td>
+            <td><strong>${e.emp_name}</strong></td>
             <td>${e.street_no || '-'}</td>
             <td>${e.city || '-'}</td>
-            <td>${e.companies || '-'}</td>
-            <td>$${e.total_salary ? parseInt(e.total_salary).toLocaleString() : '0'}</td>
-            <td>${e.manager_name || '-'}</td>
+            <td>${e.company_count || 0}</td>
+            <td>${formatCurrency(e.total_salary)}</td>
+            <td>${e.manager_name || '<span style="color:#999">None</span>'}</td>
             <td class="actions">
-                <button class="btn btn-primary btn-small" onclick="editEmployee(${e.emp_id})">Edit</button>
-                <button class="btn btn-danger btn-small" onclick="deleteEmployee(${e.emp_id})">Delete</button>
+                <button class="btn btn-small btn-secondary" onclick="editEmployee(${JSON.stringify(e).replace(/"/g, '&quot;')})">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteEmployee(${e.emp_id})">Delete</button>
             </td>
         </tr>
-    `).join('');
+    `).join('') || '<tr><td colspan="8" class="empty-state"><span>👥</span><p>No employees found</p></td></tr>';
+    
+    document.getElementById('employeesTable').innerHTML = html;
 }
 
 function searchEmployees() {
     const search = document.getElementById('employeeSearch').value.toLowerCase();
     const filtered = allEmployees.filter(e => 
         e.emp_name.toLowerCase().includes(search) || 
-        (e.city && e.city.toLowerCase().includes(search)) ||
-        String(e.emp_id).includes(search)
+        (e.city && e.city.toLowerCase().includes(search))
     );
     renderEmployees(filtered);
 }
 
-function populateEmployeeDropdowns() {
-    const dropdowns = ['managerId', 'worksEmpId', 'managesEmpId', 'managesManagerId'];
-    dropdowns.forEach(id => {
-        const select = document.getElementById(id);
-        if (select) {
-            const firstOption = select.options[0].outerHTML;
-            select.innerHTML = firstOption + allEmployees.map(e => 
-                `<option value="${e.emp_id}">${e.emp_name} (ID: ${e.emp_id})</option>`
-            ).join('');
-        }
-    });
-}
-
-function openEmployeeModal(employee = null) {
-    document.getElementById('employeeModalTitle').textContent = employee ? 'Edit Employee' : 'Add Employee';
-    document.getElementById('employeeId').value = employee ? employee.emp_id : '';
-    document.getElementById('empName').value = employee ? employee.emp_name : '';
-    document.getElementById('streetNo').value = employee ? employee.street_no || '' : '';
-    document.getElementById('empCity').value = employee ? employee.city || '' : '';
-    document.getElementById('managerId').value = employee ? employee.manager_id || '' : '';
-    document.getElementById('employeeModal').classList.add('active');
-}
-
-async function editEmployee(id) {
-    try {
-        const response = await fetch(`${API_URL}/employees/${id}`, { headers: getAuthHeaders() });
-        const data = await response.json();
-        if (data.success) openEmployeeModal(data.data);
-    } catch (error) {
-        console.error('Error fetching employee:', error);
-    }
-}
-
-async function saveEmployee(event) {
-    event.preventDefault();
+function populateManagerDropdowns() {
+    const options = '<option value="">-- No Manager --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
     
-    const id = document.getElementById('employeeId').value;
+    document.getElementById('managerId').innerHTML = options;
+    document.getElementById('managesManagerId').innerHTML = options.replace('-- No Manager --', '-- Select Manager --');
+    document.getElementById('managesEmpId').innerHTML = options.replace('-- No Manager --', '-- Select Employee --');
+    
+    // Works dropdowns
+    const empOptions = '<option value="">-- Select Employee --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
+    document.getElementById('worksEmpId').innerHTML = empOptions;
+}
+
+function openEmployeeModal() {
+    document.getElementById('employeeModalTitle').textContent = 'Add Employee';
+    document.getElementById('employeeForm').reset();
+    document.getElementById('employeeId').value = '';
+    openModal('employeeModal');
+}
+
+function editEmployee(emp) {
+    document.getElementById('employeeModalTitle').textContent = 'Edit Employee';
+    document.getElementById('employeeId').value = emp.emp_id;
+    document.getElementById('empName').value = emp.emp_name;
+    document.getElementById('streetNo').value = emp.street_no || '';
+    document.getElementById('empCity').value = emp.city || '';
+    document.getElementById('managerId').value = emp.manager_id || '';
+    openModal('employeeModal');
+}
+
+async function saveEmployee(e) {
+    e.preventDefault();
+    const empId = document.getElementById('employeeId').value;
+    const managerId = document.getElementById('managerId').value;
+    
     const data = {
         emp_name: document.getElementById('empName').value,
         street_no: document.getElementById('streetNo').value || null,
         city: document.getElementById('empCity').value || null,
-        manager_id: document.getElementById('managerId').value || null
+        manager_id: managerId || null
     };
-
+    
     try {
-        const url = id ? `${API_URL}/employees/${id}` : `${API_URL}/employees`;
-        const method = id ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-            method,
-            headers: getAuthHeaders(),
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('employeesMessage', 'Employee saved successfully!', 'success');
-            closeModal('employeeModal');
-            loadEmployees();
-            loadManages();
+        if (empId) {
+            await api(`/employees/${empId}`, 'PUT', data);
+            showToast('Employee updated successfully');
         } else {
-            showMessage('employeesMessage', result.error || 'Error saving employee', 'error');
+            await api('/employees', 'POST', data);
+            showToast('Employee created successfully');
         }
+        closeModal('employeeModal');
+        loadEmployees();
     } catch (error) {
-        showMessage('employeesMessage', 'Error saving employee', 'error');
+        showToast('Error saving employee', 'error');
     }
 }
 
 async function deleteEmployee(id) {
-    if (!confirm('Delete this employee? This will also delete all related work and management relationships.')) return;
-
+    if (!confirm('Delete this employee?')) return;
+    
     try {
-        const response = await fetch(`${API_URL}/employees/${id}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('employeesMessage', 'Employee deleted successfully!', 'success');
-            loadEmployees();
-            loadWorks();
-            loadManages();
-        } else {
-            showMessage('employeesMessage', result.error || 'Error deleting employee', 'error');
-        }
+        await api(`/employees/${id}`, 'DELETE');
+        showToast('Employee deleted');
+        loadEmployees();
     } catch (error) {
-        showMessage('employeesMessage', 'Error deleting employee', 'error');
+        showToast('Error deleting employee', 'error');
     }
 }
 
-// ==================== Works ====================
-
+// ===================== WORKS =====================
 async function loadWorks() {
     try {
-        const response = await fetch(`${API_URL}/works`, { headers: getAuthHeaders() });
-        const data = await response.json();
-        
-        if (data.success) {
-            allWorks = data.data;
-            renderWorks(allWorks);
-            populateCompanyDropdown();
-        }
+        const [worksRes, companiesRes] = await Promise.all([
+            api('/works'),
+            api('/companies')
+        ]);
+        allWorks = worksRes.data || [];
+        allCompanies = companiesRes.data || [];
+        renderWorks(allWorks);
+        populateCompanyDropdown();
     } catch (error) {
-        console.error('Error loading works:', error);
+        showToast('Error loading work assignments', 'error');
     }
 }
 
 function renderWorks(works) {
-    const tbody = document.getElementById('worksTable');
-    if (works.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No work relationships found</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = works.map(w => `
+    const html = works.map(w => `
         <tr>
-            <td>${w.emp_id}</td>
-            <td>${w.emp_name}</td>
+            <td><strong>${w.emp_name || `Employee #${w.emp_id}`}</strong></td>
             <td>${w.company_name}</td>
-            <td>$${parseInt(w.salary || 0).toLocaleString()}</td>
+            <td>${formatCurrency(w.salary)}</td>
             <td class="actions">
-                <button class="btn btn-primary btn-small" onclick="editWorks(${w.emp_id}, '${w.company_name}')">Edit</button>
-                <button class="btn btn-danger btn-small" onclick="deleteWorks(${w.emp_id}, '${w.company_name}')">Delete</button>
+                <button class="btn btn-small btn-secondary" onclick="editWorks(${w.emp_id}, '${w.company_name}', ${w.salary})">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteWorks(${w.emp_id}, '${w.company_name}')">Remove</button>
             </td>
         </tr>
-    `).join('');
+    `).join('') || '<tr><td colspan="4" class="empty-state"><span>💼</span><p>No work assignments</p></td></tr>';
+    
+    document.getElementById('worksTable').innerHTML = html;
 }
 
 function searchWorks() {
     const search = document.getElementById('worksSearch').value.toLowerCase();
     const filtered = allWorks.filter(w => 
-        w.emp_name.toLowerCase().includes(search) || 
+        (w.emp_name && w.emp_name.toLowerCase().includes(search)) ||
         w.company_name.toLowerCase().includes(search)
     );
     renderWorks(filtered);
 }
 
 function populateCompanyDropdown() {
-    const select = document.getElementById('worksCompany');
-    if (select) {
-        const firstOption = select.options[0].outerHTML;
-        select.innerHTML = firstOption + allCompanies.map(c => 
-            `<option value="${c.company_name}">${c.company_name}</option>`
-        ).join('');
-    }
+    const options = '<option value="">-- Select Company --</option>' + 
+        allCompanies.map(c => `<option value="${c.company_name}">${c.company_name}</option>`).join('');
+    document.getElementById('worksCompany').innerHTML = options;
 }
 
-function openWorksModal(work = null) {
-    document.getElementById('worksModalTitle').textContent = work ? 'Edit Work Relationship' : 'Add Work Relationship';
-    document.getElementById('worksOldEmpId').value = work ? work.emp_id : '';
-    document.getElementById('worksOldCompany').value = work ? work.company_name : '';
-    document.getElementById('worksEmpId').value = work ? work.emp_id : '';
-    document.getElementById('worksCompany').value = work ? work.company_name : '';
-    document.getElementById('worksSalary').value = work ? work.salary : 0;
-    
-    // Disable employee and company selection when editing
-    document.getElementById('worksEmpId').disabled = !!work;
-    document.getElementById('worksCompany').disabled = !!work;
-    
-    document.getElementById('worksModal').classList.add('active');
+function openWorksModal() {
+    document.getElementById('worksModalTitle').textContent = 'Assign Employee to Company';
+    document.getElementById('worksForm').reset();
+    document.getElementById('worksOldEmpId').value = '';
+    document.getElementById('worksOldCompany').value = '';
+    document.getElementById('worksSalary').value = '0';
+    loadEmployees().then(() => {
+        openModal('worksModal');
+    });
 }
 
-async function editWorks(empId, companyName) {
-    const work = allWorks.find(w => w.emp_id === empId && w.company_name === companyName);
-    if (work) openWorksModal(work);
+function editWorks(empId, company, salary) {
+    document.getElementById('worksModalTitle').textContent = 'Edit Assignment';
+    document.getElementById('worksOldEmpId').value = empId;
+    document.getElementById('worksOldCompany').value = company;
+    document.getElementById('worksEmpId').value = empId;
+    document.getElementById('worksCompany').value = company;
+    document.getElementById('worksSalary').value = salary;
+    openModal('worksModal');
 }
 
-async function saveWorks(event) {
-    event.preventDefault();
-    
+async function saveWorks(e) {
+    e.preventDefault();
     const oldEmpId = document.getElementById('worksOldEmpId').value;
     const oldCompany = document.getElementById('worksOldCompany').value;
-    const isEdit = oldEmpId && oldCompany;
-
+    
     const data = {
-        emp_id: parseInt(document.getElementById('worksEmpId').value),
+        emp_id: document.getElementById('worksEmpId').value,
         company_name: document.getElementById('worksCompany').value,
-        salary: parseInt(document.getElementById('worksSalary').value) || 0
+        salary: document.getElementById('worksSalary').value || 0
     };
-
+    
     try {
-        let url, method;
-        if (isEdit) {
-            url = `${API_URL}/works/${oldEmpId}/${encodeURIComponent(oldCompany)}`;
-            method = 'PUT';
+        if (oldEmpId && oldCompany) {
+            await api(`/works/${oldEmpId}/${encodeURIComponent(oldCompany)}`, 'PUT', data);
+            showToast('Assignment updated');
         } else {
-            url = `${API_URL}/works`;
-            method = 'POST';
+            await api('/works', 'POST', data);
+            showToast('Employee assigned to company');
         }
-        
-        const response = await fetch(url, {
-            method,
-            headers: getAuthHeaders(),
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('worksMessage', 'Work relationship saved successfully!', 'success');
-            closeModal('worksModal');
-            loadWorks();
-            loadEmployees();
-        } else {
-            showMessage('worksMessage', result.error || 'Error saving work relationship', 'error');
-        }
+        closeModal('worksModal');
+        loadWorks();
     } catch (error) {
-        showMessage('worksMessage', 'Error saving work relationship', 'error');
+        showToast('Error saving assignment', 'error');
     }
 }
 
-async function deleteWorks(empId, companyName) {
-    if (!confirm(`Remove ${companyName} from employee ${empId}?`)) return;
-
+async function deleteWorks(empId, company) {
+    if (!confirm('Remove this work assignment?')) return;
+    
     try {
-        const response = await fetch(`${API_URL}/works/${empId}/${encodeURIComponent(companyName)}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('worksMessage', 'Work relationship deleted successfully!', 'success');
-            loadWorks();
-            loadEmployees();
-        } else {
-            showMessage('worksMessage', result.error || 'Error deleting work relationship', 'error');
-        }
+        await api(`/works/${empId}/${encodeURIComponent(company)}`, 'DELETE');
+        showToast('Assignment removed');
+        loadWorks();
     } catch (error) {
-        showMessage('worksMessage', 'Error deleting work relationship', 'error');
+        showToast('Error removing assignment', 'error');
     }
 }
 
-// ==================== Manages ====================
-
+// ===================== MANAGES =====================
 async function loadManages() {
     try {
-        const response = await fetch(`${API_URL}/manages`, { headers: getAuthHeaders() });
-        const data = await response.json();
-        
-        if (data.success) {
-            allManages = data.data;
-            renderManages(allManages);
-        }
+        const res = await api('/manages');
+        allManages = res.data || [];
+        renderManages(allManages);
+        loadEmployees();
     } catch (error) {
-        console.error('Error loading manages:', error);
+        showToast('Error loading management data', 'error');
     }
 }
 
 function renderManages(manages) {
-    const tbody = document.getElementById('managesTable');
-    if (manages.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No management relationships found</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = manages.map(m => `
+    const html = manages.map(m => `
         <tr>
-            <td>${m.employee_name} (ID: ${m.emp_id})</td>
-            <td>${m.employee_city || '-'}</td>
-            <td>${m.manager_name} (ID: ${m.manager_id})</td>
+            <td><strong>${m.emp_name || `Employee #${m.emp_id}`}</strong></td>
+            <td>${m.emp_city || '-'}</td>
+            <td><strong>${m.manager_name || `Manager #${m.manager_id}`}</strong></td>
             <td>${m.manager_city || '-'}</td>
             <td class="actions">
-                <button class="btn btn-danger btn-small" onclick="deleteManages(${m.emp_id})">Remove</button>
+                <button class="btn btn-small btn-danger" onclick="deleteManages(${m.emp_id})">Remove</button>
             </td>
         </tr>
-    `).join('');
+    `).join('') || '<tr><td colspan="5" class="empty-state"><span>👔</span><p>No management relationships</p></td></tr>';
+    
+    document.getElementById('managesTable').innerHTML = html;
 }
 
 function openManagesModal() {
-    document.getElementById('managesEmpId').value = '';
-    document.getElementById('managesManagerId').value = '';
-    document.getElementById('managesModal').classList.add('active');
+    document.getElementById('managesForm').reset();
+    openModal('managesModal');
 }
 
-async function saveManages(event) {
-    event.preventDefault();
+async function saveManages(e) {
+    e.preventDefault();
+    const empId = document.getElementById('managesEmpId').value;
+    const managerId = document.getElementById('managesManagerId').value;
     
-    const empId = parseInt(document.getElementById('managesEmpId').value);
-    const managerId = parseInt(document.getElementById('managesManagerId').value);
-
     if (empId === managerId) {
-        showMessage('managesMessage', 'An employee cannot be their own manager', 'error');
+        showToast('Employee cannot manage themselves', 'error');
         return;
     }
-
+    
     try {
-        const response = await fetch(`${API_URL}/manages`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ emp_id: empId, manager_id: managerId })
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('managesMessage', 'Management relationship saved!', 'success');
-            closeModal('managesModal');
-            loadManages();
-            loadEmployees();
-        } else {
-            showMessage('managesMessage', result.error || 'Error saving relationship', 'error');
-        }
+        await api('/manages', 'POST', { emp_id: empId, manager_id: managerId });
+        showToast('Manager assigned');
+        closeModal('managesModal');
+        loadManages();
     } catch (error) {
-        showMessage('managesMessage', 'Error saving relationship', 'error');
+        showToast('Error assigning manager', 'error');
     }
 }
 
 async function deleteManages(empId) {
     if (!confirm('Remove this management relationship?')) return;
-
+    
     try {
-        const response = await fetch(`${API_URL}/manages/${empId}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-            showMessage('managesMessage', 'Management relationship removed!', 'success');
-            loadManages();
-            loadEmployees();
-        } else {
-            showMessage('managesMessage', result.error || 'Error removing relationship', 'error');
-        }
+        await api(`/manages/${empId}`, 'DELETE');
+        showToast('Management relationship removed');
+        loadManages();
     } catch (error) {
-        showMessage('managesMessage', 'Error removing relationship', 'error');
+        showToast('Error removing relationship', 'error');
     }
 }
 
-// ==================== Utilities ====================
-
-function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('active');
+// ===================== REPORTS =====================
+async function loadReports() {
+    try {
+        const [byCompany, byCity, topManagers, unassigned, empty] = await Promise.all([
+            api('/reports/salary-by-company'),
+            api('/reports/salary-by-city'),
+            api('/reports/top-managers'),
+            api('/reports/unassigned-employees'),
+            api('/reports/empty-companies')
+        ]);
+        
+        // Salary by company
+        const companyHtml = (byCompany.data || []).map(c => `
+            <div style="display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #eee">
+                <span>${c.company_name}</span>
+                <strong>${formatCurrency(c.total_salary)}</strong>
+            </div>
+        `).join('') || '<p style="color:#666">No data</p>';
+        document.getElementById('salaryByCompanyReport').innerHTML = companyHtml;
+        
+        // Salary by city
+        const cityHtml = (byCity.data || []).map(c => `
+            <div style="display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #eee">
+                <span>${c.city || 'Unknown'}</span>
+                <strong>${formatCurrency(c.total_salary)}</strong>
+            </div>
+        `).join('') || '<p style="color:#666">No data</p>';
+        document.getElementById('salaryByCityReport').innerHTML = cityHtml;
+        
+        // Top managers
+        const managersHtml = (topManagers.data || []).map(m => `
+            <tr>
+                <td><strong>${m.manager_name}</strong></td>
+                <td>${m.city || '-'}</td>
+                <td>${m.subordinate_count}</td>
+                <td>${m.subordinates || '-'}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="4">No managers found</td></tr>';
+        document.getElementById('topManagersTable').innerHTML = managersHtml;
+        
+        // Unassigned employees
+        const unassignedHtml = (unassigned.data || []).length > 0 ? 
+            unassigned.data.map(e => `<div class="badge badge-warning" style="margin:5px">${e.emp_name}</div>`).join('') :
+            '<p style="color:#10b981">✓ All employees are assigned</p>';
+        document.getElementById('unassignedReport').innerHTML = unassignedHtml;
+        
+        // Empty companies
+        const emptyHtml = (empty.data || []).length > 0 ?
+            empty.data.map(c => `<div class="badge badge-danger" style="margin:5px">${c.company_name}</div>`).join('') :
+            '<p style="color:#10b981">✓ All companies have employees</p>';
+        document.getElementById('emptyCompaniesReport').innerHTML = emptyHtml;
+        
+    } catch (error) {
+        console.error('Reports error:', error);
+    }
 }
 
-function showMessage(elementId, message, type) {
-    const el = document.getElementById(elementId);
-    el.textContent = message;
-    el.className = `message ${type}`;
-    setTimeout(() => {
-        el.className = 'message';
-    }, 5000);
+function exportReport(type) {
+    showToast('Export feature coming soon!');
 }
 
-// Close modal on outside click
-document.querySelectorAll('.modal').forEach(modal => {
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.classList.remove('active');
+// ===================== SETTINGS =====================
+async function loadSettings() {
+    try {
+        const res = await api('/settings');
+        settings = res.data || {};
+        
+        document.getElementById('settingCompanyName').value = settings.company_name || '26:07';
+        document.getElementById('settingTagline').value = settings.tagline || 'Company Management';
+        document.getElementById('settingCurrency').value = settings.currency || 'USD';
+        document.getElementById('settingDateFormat').value = settings.date_format || 'YYYY-MM-DD';
+    } catch (error) {
+        console.error('Settings error:', error);
+    }
+}
+
+async function saveSettings(e) {
+    e.preventDefault();
+    
+    const data = {
+        company_name: document.getElementById('settingCompanyName').value,
+        tagline: document.getElementById('settingTagline').value,
+        currency: document.getElementById('settingCurrency').value,
+        date_format: document.getElementById('settingDateFormat').value
+    };
+    
+    try {
+        await api('/settings', 'PUT', data);
+        settings = data;
+        document.getElementById('companyTagline').textContent = data.tagline;
+        showToast('Settings saved successfully');
+    } catch (error) {
+        showToast('Error saving settings', 'error');
+    }
+}
+
+async function changePassword(e) {
+    e.preventDefault();
+    
+    const newPass = document.getElementById('newPassword').value;
+    const confirmPass = document.getElementById('confirmPassword').value;
+    
+    if (newPass !== confirmPass) {
+        showToast('Passwords do not match', 'error');
+        return;
+    }
+    
+    try {
+        await api('/auth/change-password', 'POST', {
+            currentPassword: document.getElementById('currentPassword').value,
+            newPassword: newPass
+        });
+        showToast('Password changed successfully');
+        document.getElementById('passwordForm').reset();
+    } catch (error) {
+        showToast('Error changing password', 'error');
+    }
+}
+
+// ===================== INITIALIZATION =====================
+async function init() {
+    if (!checkAuth()) return;
+    
+    // Get user info
+    try {
+        const res = await api('/auth/me');
+        if (res.user) {
+            document.getElementById('displayUsername').textContent = res.user.username;
+            document.getElementById('userAvatar').textContent = res.user.username.charAt(0).toUpperCase();
+            document.getElementById('userRole').textContent = res.user.role === 'admin' ? 'Administrator' : 'User';
         }
-    });
-});
+    } catch (error) {
+        console.error('User info error:', error);
+    }
+    
+    // Load settings
+    try {
+        const res = await api('/settings');
+        settings = res.data || {};
+        if (settings.tagline) {
+            document.getElementById('companyTagline').textContent = settings.tagline;
+        }
+    } catch (error) {
+        console.error('Settings error:', error);
+    }
+    
+    // Load dashboard
+    loadDashboard();
+}
+
+// Start the app
+init();
 
