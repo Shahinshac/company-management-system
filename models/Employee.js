@@ -1,23 +1,19 @@
 const db = require('../database/connection');
 
 class Employee {
-  static async ensureBranchColumn() {
-    try {
-      const [cols] = await db.query("SHOW COLUMNS FROM EMPLOYEE LIKE 'Branch'");
-      if (!cols || cols.length === 0) {
-        await db.query("ALTER TABLE EMPLOYEE ADD COLUMN Branch VARCHAR(100) NULL AFTER Phone");
-      }
-    } catch (err) {
-      console.warn('ensureBranchColumn warning:', err && err.message ? err.message : err);
-    }
-  }
-  // Get all employees
+  // Get all employees with their work info
   static async getAll() {
     const [rows] = await db.query(`
-      SELECT e.*, d.Name as Department_Name 
-      FROM EMPLOYEE e
-      LEFT JOIN DEPARTMENT d ON e.Department_No = d.D_No
-      ORDER BY e.Name
+      SELECT e.*,
+        GROUP_CONCAT(DISTINCT w.company_name) as companies,
+        SUM(w.salary) as total_salary,
+        (SELECT emp_name FROM employee m 
+         INNER JOIN manages mg ON m.emp_id = mg.manager_id 
+         WHERE mg.emp_id = e.emp_id) as manager_name
+      FROM employee e
+      LEFT JOIN works w ON e.emp_id = w.emp_id
+      GROUP BY e.emp_id
+      ORDER BY e.emp_name
     `);
     return rows;
   }
@@ -25,233 +21,108 @@ class Employee {
   // Get employee by ID
   static async getById(id) {
     const [rows] = await db.query(`
-      SELECT e.*, d.Name as Department_Name, d.Location as Department_Location
-      FROM EMPLOYEE e
-      LEFT JOIN DEPARTMENT d ON e.Department_No = d.D_No
-      WHERE e.Id = ?
+      SELECT e.*,
+        (SELECT emp_name FROM employee m 
+         INNER JOIN manages mg ON m.emp_id = mg.manager_id 
+         WHERE mg.emp_id = e.emp_id) as manager_name,
+        (SELECT manager_id FROM manages WHERE emp_id = e.emp_id) as manager_id
+      FROM employee e
+      WHERE e.emp_id = ?
     `, [id]);
     return rows[0];
   }
 
   // Create new employee
   static async create(employeeData) {
-    const { Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch = null, Photo } = employeeData;
-    await this.ensureBranchColumn();
+    const { emp_name, street_no, city } = employeeData;
     const [result] = await db.query(`
-      INSERT INTO EMPLOYEE (Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch, Photo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch, Photo]);
+      INSERT INTO employee (emp_name, street_no, city) VALUES (?, ?, ?)
+    `, [emp_name, street_no || null, city || null]);
     return result.insertId;
   }
 
   // Update employee
   static async update(id, employeeData) {
-    const { Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch = null, Photo } = employeeData;
-    await this.ensureBranchColumn();
+    const { emp_name, street_no, city } = employeeData;
     const [result] = await db.query(`
-      UPDATE EMPLOYEE 
-      SET Name = ?, Gender = ?, Address = ?, Dob = ?, Doj = ?, 
-          Department_No = ?, Since = ?, Salary = ?, Email = ?, Phone = ?, Branch = ?, Photo = ?
-      WHERE Id = ?
-    `, [Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone, Branch, Photo, id]);
+      UPDATE employee SET emp_name = ?, street_no = ?, city = ? WHERE emp_id = ?
+    `, [emp_name, street_no || null, city || null, id]);
     return result.affectedRows;
   }
 
   // Delete employee
   static async delete(id) {
-    const [result] = await db.query('DELETE FROM EMPLOYEE WHERE Id = ?', [id]);
+    const [result] = await db.query('DELETE FROM employee WHERE emp_id = ?', [id]);
     return result.affectedRows;
-  }
-
-  // Get employee projects
-  static async getProjects(id) {
-    const [rows] = await db.query(`
-      SELECT p.*, w.Hours, w.Assignment_Date, w.Role
-      FROM PROJECT p
-      INNER JOIN WORKS_ON w ON p.P_No = w.Project_No
-      WHERE w.Employee_Id = ?
-    `, [id]);
-    return rows;
-  }
-
-  // Get employee dependents
-  static async getDependents(id) {
-    const [rows] = await db.query(`
-      SELECT * FROM DEPENDENT WHERE Employee_Id = ?
-    `, [id]);
-    return rows;
   }
 
   // Search employees
   static async search(searchTerm) {
     const [rows] = await db.query(`
-      SELECT e.*, d.Name as Department_Name 
-      FROM EMPLOYEE e
-      LEFT JOIN DEPARTMENT d ON e.Department_No = d.D_No
-      WHERE e.Name LIKE ? OR e.Email LIKE ? OR e.Phone LIKE ?
-      ORDER BY e.Name
+      SELECT e.*,
+        GROUP_CONCAT(DISTINCT w.company_name) as companies,
+        SUM(w.salary) as total_salary
+      FROM employee e
+      LEFT JOIN works w ON e.emp_id = w.emp_id
+      WHERE e.emp_name LIKE ? OR e.city LIKE ? OR CAST(e.emp_id AS CHAR) LIKE ?
+      GROUP BY e.emp_id
+      ORDER BY e.emp_name
     `, [`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`]);
     return rows;
   }
 
-  // Get employees by department
-  static async getByDepartment(departmentNo) {
+  // Get employees by city
+  static async getByCity(city) {
     const [rows] = await db.query(`
-      SELECT e.*, d.Name as Department_Name 
-      FROM EMPLOYEE e
-      LEFT JOIN DEPARTMENT d ON e.Department_No = d.D_No
-      WHERE e.Department_No = ?
-      ORDER BY e.Name
-    `, [departmentNo]);
+      SELECT e.*,
+        GROUP_CONCAT(DISTINCT w.company_name) as companies
+      FROM employee e
+      LEFT JOIN works w ON e.emp_id = w.emp_id
+      WHERE e.city = ?
+      GROUP BY e.emp_id
+      ORDER BY e.emp_name
+    `, [city]);
     return rows;
   }
 
-  // Assign employee to project
-  static async assignToProject(employeeId, projectNo, hours, role) {
-    const [result] = await db.query(`
-      INSERT INTO WORKS_ON (Employee_Id, Project_No, Hours, Assignment_Date, Role)
-      VALUES (?, ?, ?, CURDATE(), ?)
-      ON DUPLICATE KEY UPDATE Hours = ?, Role = ?
-    `, [employeeId, projectNo, hours, role, hours, role]);
-    return result.affectedRows;
-  }
-
-  // Replace project assignments for an employee with provided list
-  // projects: [{ projectNo, hours, role }, ...]
-  static async replaceProjects(employeeId, projects = []) {
-    // ensure projects is array
-    if (!Array.isArray(projects)) return 0;
-
-    // Delete projects not in the provided list
-    const projectNos = projects.map(p => p.projectNo).filter(p => p != null);
-    if (projectNos.length > 0) {
-      await db.query('DELETE FROM WORKS_ON WHERE Employee_Id = ? AND Project_No NOT IN (?)', [employeeId, projectNos]);
-    } else {
-      // no projects provided -> remove all assignments
-      await db.query('DELETE FROM WORKS_ON WHERE Employee_Id = ?', [employeeId]);
-    }
-
-    // Upsert provided projects
-    for (const p of projects) {
-      const projectNo = p.projectNo || p.Project_No || p.project_no;
-      const hours = p.hours || p.Hours || 0;
-      const role = p.role || p.Role || null;
-      if (!projectNo) continue;
-      await this.assignToProject(employeeId, projectNo, hours, role);
-    }
-
-    return true;
-  }
-
-  // Remove employee from project
-  static async removeFromProject(employeeId, projectNo) {
-    const [result] = await db.query(`
-      DELETE FROM WORKS_ON WHERE Employee_Id = ? AND Project_No = ?
-    `, [employeeId, projectNo]);
-    return result.affectedRows;
-  }
-
-  // Authentication: find by username or email
-  static async findByIdentifier(identifier) {
-    const [rows] = await db.query('SELECT * FROM EMPLOYEE WHERE Username = ? OR Email = ? LIMIT 1', [identifier, identifier]);
-    return rows[0];
-  }
-
-  // Create employee with authentication fields (used by admin to create accounts)
-  static async createAuthEmployee({ Username, Email, Role = 'Employee', passwordHash, Branch = null, Name: ProvidedName }) {
-    // Use Username as Name if Name not provided to satisfy NOT NULL constraint
-    const Name = ProvidedName || Username;
-    await this.ensureBranchColumn();
-    // ForcePasswordChange defaults to 1 so admins must instruct users to change on first login
-    const [result] = await db.query(`
-      INSERT INTO EMPLOYEE (Name, Username, Email, Role, Password, Branch, Status, ForcePasswordChange)
-      VALUES (?, ?, ?, ?, ?, ?, 'Active', 1)
-    `, [Name, Username, Email, Role, passwordHash, Branch]);
-    return result.insertId;
-  }
-
-  static async usernameExists(username) {
-    const [rows] = await db.query('SELECT Id FROM EMPLOYEE WHERE Username = ?', [username]);
-    return rows.length > 0;
-  }
-
-  static async emailExists(email) {
-    const [rows] = await db.query('SELECT Id FROM EMPLOYEE WHERE Email = ?', [email]);
-    return rows.length > 0;
-  }
-
-  static async verifyPassword(plainPassword, hashedPassword) {
-    // If the stored password is missing or falsy, return false to avoid throwing in bcrypt
-    if (!hashedPassword) return false;
-
-    try {
-      const bcrypt = require('bcryptjs');
-      return await bcrypt.compare(plainPassword, hashedPassword);
-    } catch (err) {
-      console.error('Password verification error:', err);
-      return false;
-    }
-  }
-
-  static generateToken(employee) {
-    const jwt = require('jsonwebtoken');
-    return jwt.sign(
-      { id: employee.Id, username: employee.Username, email: employee.Email, role: employee.Role },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: process.env.JWT_EXPIRE || '24h' }
-    );
-  }
-
-  static async updatePassword(id, passwordHash) {
-    const [result] = await db.query('UPDATE EMPLOYEE SET Password = ?, ForcePasswordChange = 0 WHERE Id = ?', [passwordHash, id]);
-    return result.affectedRows > 0;
-  }
-
-  static async setForcePasswordChange(id, flag = 1) {
-    const [result] = await db.query('UPDATE EMPLOYEE SET ForcePasswordChange = ? WHERE Id = ?', [flag, id]);
-    return result.affectedRows > 0;
-  }
-
-  // Update only provided fields (safe partial update)
-  static async updatePartial(id, fields) {
-    if (!fields || Object.keys(fields).length === 0) return 0;
-    const allowed = ['Name','Gender','Address','Dob','Doj','Department_No','Since','Salary','Email','Phone','Branch','Photo','Status','Role'];
-    const keys = Object.keys(fields).filter(k => allowed.includes(k));
-    if (keys.length === 0) return 0;
-    const sets = keys.map(k => `
-      ${k} = ?
-    `).join(',');
-    const values = keys.map(k => fields[k]);
-    values.push(id);
-    const sql = `UPDATE EMPLOYEE SET ${keys.map(k=>`${k} = ?`).join(', ')} WHERE Id = ?`;
-    const [result] = await db.query(sql, [...values.slice(0, -1), id]);
-    return result.affectedRows;
-  }
-
-  static async getAllUsers() {
-    const args = Array.from(arguments);
-    const branch = args[0] || null;
-    if (branch) {
-      const [rows] = await db.query('SELECT Id, Name, Username, Email, Role, Status, Branch, created_at FROM EMPLOYEE WHERE Branch = ? ORDER BY created_at DESC', [branch]);
-      return rows;
-    }
-    const [rows] = await db.query('SELECT Id, Name, Username, Email, Role, Status, Branch, created_at FROM EMPLOYEE ORDER BY created_at DESC');
+  // Get work history for employee
+  static async getWorkHistory(id) {
+    const [rows] = await db.query(`
+      SELECT w.*, c.city as company_city
+      FROM works w
+      INNER JOIN company c ON w.company_name = c.company_name
+      WHERE w.emp_id = ?
+    `, [id]);
     return rows;
   }
 
-  static async updateRole(id, role) {
-    const [result] = await db.query('UPDATE EMPLOYEE SET Role = ? WHERE Id = ?', [role, id]);
-    return result.affectedRows > 0;
+  // Get subordinates (employees managed by this employee)
+  static async getSubordinates(id) {
+    const [rows] = await db.query(`
+      SELECT e.*
+      FROM employee e
+      INNER JOIN manages m ON e.emp_id = m.emp_id
+      WHERE m.manager_id = ?
+      ORDER BY e.emp_name
+    `, [id]);
+    return rows;
   }
 
-  static async setStatus(id, status) {
-    const [result] = await db.query('UPDATE EMPLOYEE SET Status = ? WHERE Id = ?', [status, id]);
-    return result.affectedRows > 0;
+  // Get all unique cities
+  static async getCities() {
+    const [rows] = await db.query('SELECT DISTINCT city FROM employee WHERE city IS NOT NULL ORDER BY city');
+    return rows.map(r => r.city);
   }
 
-  static async deleteEmployee(id) {
-    const [result] = await db.query('DELETE FROM EMPLOYEE WHERE Id = ?', [id]);
-    return result.affectedRows > 0;
+  // Get employees without managers
+  static async getTopManagers() {
+    const [rows] = await db.query(`
+      SELECT e.*
+      FROM employee e
+      WHERE e.emp_id NOT IN (SELECT emp_id FROM manages)
+      ORDER BY e.emp_name
+    `);
+    return rows;
   }
 }
 

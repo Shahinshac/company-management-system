@@ -1,148 +1,139 @@
 const express = require('express');
 const router = express.Router();
-const Employee = require('../models/Employee');
-const { body, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-// NOTE: Public registration is disabled. All users must be created by Admin.
-router.post('/register', (req, res) => {
-  return res.status(403).json({ error: 'Self registration is disabled. Contact an administrator.' });
-});
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Login
-router.post('/login', [
-  body('identifier').notEmpty().withMessage('Username or email required'),
-  body('password').notEmpty().withMessage('Password required'),
-], async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
-    const devLog = (msg, obj) => {
-      if (process.env.DEBUG_AUTH === 'true' || process.env.NODE_ENV !== 'production') {
-        if (obj) console.log(msg, obj);
-        else console.log(msg);
-      }
-    };
+    const { username, password } = req.body;
 
-    devLog('Login request headers:', req.headers);
-    devLog('Login request body snippet:', JSON.stringify(req.body).slice(0, 200));
-
-    // Check DB connectivity early and return 503 if unavailable
-    try {
-      const db = require('../database/connection');
-      await db.query('SELECT 1');
-    } catch (dbErr) {
-      console.error('Database unavailable during login:', dbErr && dbErr.stack ? dbErr.stack : dbErr);
-      return res.status(503).json({ error: 'Service unavailable - database connection failed' });
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username and password are required'
+      });
     }
 
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      const payload = { errors: errors.array() };
-      devLog('Responding 400:', payload);
-      return res.status(400).json(payload);
+    const user = await User.verifyPassword(username, password);
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password'
+      });
     }
 
-    const { identifier, password } = req.body;
-
-    // Find employee by username or email
-    devLog('Login attempt for identifier:', identifier);
-    const employee = await Employee.findByIdentifier(identifier);
-    devLog('Employee found:', employee ? { id: employee.Id, username: employee.Username, email: employee.Email, status: employee.Status } : null);
-    if (!employee) {
-      const payload = { error: 'Invalid credentials' };
-      devLog('Responding 401:', payload);
-      return res.status(401).json(payload);
+    if (user.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        error: 'Account is inactive'
+      });
     }
 
-    // Check status
-    if (employee.Status !== 'Active') {
-      const payload = { error: 'Account is inactive. Contact admin.' };
-      devLog('Responding 403:', payload);
-      return res.status(403).json(payload);
-    }
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-    // Verify password
-    // If stored password is missing, return a helpful message (avoid ambiguous 401)
-    const hasStoredPassword = !!employee.Password;
-    devLog('Stored password present for user?', { username: employee.Username, hasStoredPassword });
-    if (!hasStoredPassword) {
-      const payload = { error: 'Account has no password set. Contact administrator to set a password.' };
-      devLog('Responding 403 (no stored password):', payload);
-      return res.status(403).json(payload);
-    }
-
-    const isValidPassword = await Employee.verifyPassword(password, employee.Password);
-    devLog('Password verification result for user', { username: employee.Username, ok: isValidPassword });
-    if (!isValidPassword) {
-      const payload = { error: 'Invalid credentials' };
-      devLog('Responding 401:', payload);
-      return res.status(401).json(payload);
-    }
-
-    // Generate token
-    const token = Employee.generateToken(employee);
-
-    const payload = {
+    res.json({
+      success: true,
       message: 'Login successful',
       token,
       user: {
-        id: employee.Id,
-        username: employee.Username,
-        email: employee.Email,
-        role: employee.Role,
-        forcePasswordChange: !!employee.ForcePasswordChange
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role
       }
-    };
-    devLog('Responding 200:', { message: payload.message, user: payload.user });
-    res.json(payload);
+    });
   } catch (error) {
-    console.error('Login error:', error && error.stack ? error.stack : error);
-    // Provide a safe error message and include details only in non-production
-    const resp = { error: 'Internal server error' };
-    if (process.env.NODE_ENV !== 'production') resp.details = error && (error.message || error.stack);
-    res.status(500).json(resp);
+    console.error('Login error:', error);
+    res.status(500).json({ success: false, error: 'Login failed' });
   }
 });
 
-const { authenticateToken } = require('../middleware/authMiddleware');
-
-// Get current employee profile
-router.get('/me', authenticateToken, async (req, res) => {
+// Register (Admin only in production)
+router.post('/register', async (req, res) => {
   try {
-    const employee = await Employee.getById(req.user.id);
-    if (!employee) {
-      return res.status(404).json({ error: 'User not found' });
+    const { username, password, email, role } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username and password are required'
+      });
     }
-    res.json({ user: employee });
+
+    // Check if username exists
+    if (await User.usernameExists(username)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username already exists'
+      });
+    }
+
+    // Check if email exists
+    if (email && await User.emailExists(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email already exists'
+      });
+    }
+
+    const userId = await User.create({
+      username,
+      password,
+      email,
+      role: role || 'User'
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'User registered successfully',
+      data: { id: userId, username, email, role: role || 'User' }
+    });
   } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ error: 'Failed to get user info' });
+    console.error('Register error:', error);
+    res.status(500).json({ success: false, error: 'Registration failed' });
   }
 });
 
-// Change password (user)
-router.patch('/change-password', authenticateToken, async (req, res) => {
+// Change password
+router.post('/change-password', async (req, res) => {
   try {
-    const { oldPassword, newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    const { username, currentPassword, newPassword } = req.body;
+
+    if (!username || !currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'All fields are required'
+      });
     }
 
-    const employee = await Employee.findByIdentifier(req.user.username || req.user.email);
-    if (!employee) return res.status(404).json({ error: 'User not found' });
-
-    // If oldPassword provided, verify it
-    if (oldPassword) {
-      const isValid = await Employee.verifyPassword(oldPassword, employee.Password);
-      if (!isValid) return res.status(401).json({ error: 'Old password incorrect' });
+    // Verify current password
+    const user = await User.verifyPassword(username, currentPassword);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Current password is incorrect'
+      });
     }
 
-    const bcrypt = require('bcryptjs');
-    const hash = await bcrypt.hash(newPassword, 12);
-    await Employee.updatePassword(employee.Id, hash);
+    // Update password
+    await User.updatePassword(user.id, newPassword);
 
-    res.json({ message: 'Password updated successfully' });
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
   } catch (error) {
     console.error('Change password error:', error);
-    res.status(500).json({ error: 'Failed to change password' });
+    res.status(500).json({ success: false, error: 'Failed to change password' });
   }
 });
 

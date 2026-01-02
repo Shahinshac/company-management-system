@@ -1,22 +1,6 @@
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
-
-// Helper function to add column if it doesn't exist (MySQL 5.x compatible)
-async function addColumnIfNotExists(connection, table, column, definition) {
-  try {
-    const [rows] = await connection.query(`
-      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
-    `, [process.env.DB_NAME || 'company_management', table, column]);
-    
-    if (rows.length === 0) {
-      await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-      console.log(`Added column ${column} to ${table}`);
-    }
-  } catch (err) {
-    // Table might not exist yet, ignore
-  }
-}
 
 async function initializeDatabase() {
   const connection = await mysql.createConnection({
@@ -27,193 +11,174 @@ async function initializeDatabase() {
   });
 
   try {
-    // Create database if not exists
-    await connection.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME || 'company_management'}`);
-    console.log('Database created or already exists');
+    const dbName = process.env.DB_NAME || 'company_db';
+    
+    // Create database
+    await connection.query(`CREATE DATABASE IF NOT EXISTS ${dbName}`);
+    console.log(`✓ Database '${dbName}' created/verified`);
+    
+    await connection.query(`USE ${dbName}`);
 
-    // Use the database
-    await connection.query(`USE ${process.env.DB_NAME || 'company_management'}`);
+    // Drop existing tables (in correct order due to foreign keys)
+    console.log('Dropping existing tables...');
+    await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+    await connection.query('DROP TABLE IF EXISTS manages');
+    await connection.query('DROP TABLE IF EXISTS works');
+    await connection.query('DROP TABLE IF EXISTS employee');
+    await connection.query('DROP TABLE IF EXISTS company');
+    await connection.query('DROP TABLE IF EXISTS users');
+    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
 
-    // Create DEPARTMENT table
+    // Create COMPANY table
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS DEPARTMENT (
-        D_No VARCHAR(20) PRIMARY KEY,
-        Name VARCHAR(100) NOT NULL,
-        Location VARCHAR(200),
-        Manager_Id INT,
-        Manager_Start_Date DATE,
+      CREATE TABLE company (
+        company_name VARCHAR(50) PRIMARY KEY,
+        city VARCHAR(50) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
-    console.log('DEPARTMENT table created');
+    console.log('✓ COMPANY table created');
 
     // Create EMPLOYEE table
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS EMPLOYEE (
-        Id INT AUTO_INCREMENT PRIMARY KEY,
-        Name VARCHAR(100) NOT NULL,
-        Gender ENUM('Male', 'Female', 'Other') NOT NULL,
-        Address VARCHAR(255),
-        Dob DATE,
-        Doj DATE,
-        Department_No VARCHAR(20),
-        Since DATE,
-        Salary DECIMAL(10, 2),
-        Email VARCHAR(100) UNIQUE,
-        Phone VARCHAR(20),
-        Photo LONGTEXT,
+      CREATE TABLE employee (
+        emp_id INT AUTO_INCREMENT PRIMARY KEY,
+        emp_name VARCHAR(50) NOT NULL,
+        street_no INT,
+        city VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ EMPLOYEE table created');
+
+    // Create WORKS table (relationship between employee and company)
+    await connection.query(`
+      CREATE TABLE works (
+        emp_id INT NOT NULL,
+        company_name VARCHAR(50) NOT NULL,
+        salary INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (Department_No) REFERENCES DEPARTMENT(D_No) ON DELETE SET NULL
+        PRIMARY KEY (emp_id, company_name),
+        FOREIGN KEY (emp_id) REFERENCES employee(emp_id) ON DELETE CASCADE,
+        FOREIGN KEY (company_name) REFERENCES company(company_name) ON DELETE CASCADE ON UPDATE CASCADE
       )
     `);
-    console.log('EMPLOYEE table created');
+    console.log('✓ WORKS table created');
 
-    // Add authentication columns to EMPLOYEE (MySQL 5.x compatible)
-    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Username', 'VARCHAR(50) UNIQUE');
-    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Password', 'VARCHAR(255)');
-    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Role', "ENUM('Admin','Employee') DEFAULT 'Employee'");
-    await addColumnIfNotExists(connection, 'EMPLOYEE', 'Status', "ENUM('Active','Inactive') DEFAULT 'Active'");
-    await addColumnIfNotExists(connection, 'EMPLOYEE', 'ForcePasswordChange', 'TINYINT(1) DEFAULT 0');
-    console.log('EMPLOYEE table updated with authentication fields');
-
-    // Add foreign key for manager in DEPARTMENT table
+    // Create MANAGES table (self-referencing relationship)
     await connection.query(`
-      ALTER TABLE DEPARTMENT 
-      ADD CONSTRAINT fk_manager 
-      FOREIGN KEY (Manager_Id) REFERENCES EMPLOYEE(Id) ON DELETE SET NULL
-    `).catch(() => {
-      console.log('Manager foreign key already exists or cannot be added');
-    });
+      CREATE TABLE manages (
+        emp_id INT NOT NULL,
+        manager_id INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (emp_id),
+        FOREIGN KEY (emp_id) REFERENCES employee(emp_id) ON DELETE CASCADE,
+        FOREIGN KEY (manager_id) REFERENCES employee(emp_id) ON DELETE CASCADE
+      )
+    `);
+    console.log('✓ MANAGES table created');
 
-    // Create PROJECT table
+    // Create USERS table for authentication
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS PROJECT (
-        P_No VARCHAR(20) PRIMARY KEY,
-        Name VARCHAR(100) NOT NULL,
-        Location VARCHAR(200),
-        Department_No VARCHAR(20),
-        Budget DECIMAL(15, 2),
-        Start_Date DATE,
-        End_Date DATE,
-        Status ENUM('Planning', 'Active', 'Completed', 'On Hold') DEFAULT 'Planning',
+      CREATE TABLE users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        email VARCHAR(100) UNIQUE,
+        role ENUM('Admin', 'User') DEFAULT 'User',
+        status ENUM('Active', 'Inactive') DEFAULT 'Active',
+        emp_id INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (Department_No) REFERENCES DEPARTMENT(D_No) ON DELETE SET NULL
+        FOREIGN KEY (emp_id) REFERENCES employee(emp_id) ON DELETE SET NULL
       )
     `);
-    console.log('PROJECT table created');
+    console.log('✓ USERS table created');
 
-    // Create DEPENDENT table
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS DEPENDENT (
-        Id INT AUTO_INCREMENT PRIMARY KEY,
-        Employee_Id INT NOT NULL,
-        D_name VARCHAR(100) NOT NULL,
-        Gender ENUM('Male', 'Female', 'Other') NOT NULL,
-        Relationship VARCHAR(50) NOT NULL,
-        Date_of_Birth DATE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (Employee_Id) REFERENCES EMPLOYEE(Id) ON DELETE CASCADE
-      )
-    `);
-    console.log('DEPENDENT table created');
-
-    // Create WORKS_ON junction table (Employee-Project relationship)
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS WORKS_ON (
-        Employee_Id INT NOT NULL,
-        Project_No VARCHAR(20) NOT NULL,
-        Hours DECIMAL(5, 2) DEFAULT 0,
-        Assignment_Date DATE,
-        Role VARCHAR(50),
-        PRIMARY KEY (Employee_Id, Project_No),
-        FOREIGN KEY (Employee_Id) REFERENCES EMPLOYEE(Id) ON DELETE CASCADE,
-        FOREIGN KEY (Project_No) REFERENCES PROJECT(P_No) ON DELETE CASCADE
-      )
-    `);
-    console.log('WORKS_ON table created');
+    // Create indexes for better performance
+    await connection.query('CREATE INDEX idx_employee_name ON employee(emp_name)');
+    await connection.query('CREATE INDEX idx_employee_city ON employee(city)');
+    await connection.query('CREATE INDEX idx_company_city ON company(city)');
+    await connection.query('CREATE INDEX idx_works_salary ON works(salary)');
+    console.log('✓ Indexes created');
 
     // Insert sample data
     console.log('\nInserting sample data...');
 
-    // Sample Departments
+    // Sample companies
     await connection.query(`
-      INSERT IGNORE INTO DEPARTMENT (D_No, Name, Location) VALUES
-      ('D001', 'Human Resources', 'Headquarters'),
-      ('D002', 'Engineering', 'Tech Park'),
-      ('D003', 'Sales', 'Downtown Office'),
-      ('D004', 'Finance', 'Headquarters'),
-      ('D005', 'Marketing', 'Creative Hub')
+      INSERT INTO company (company_name, city) VALUES 
+      ('TechCorp', 'New York'),
+      ('DataSoft', 'San Francisco'),
+      ('WebInnovate', 'Los Angeles'),
+      ('CloudSystems', 'Seattle'),
+      ('CodeMasters', 'Austin')
     `);
-    console.log('Sample departments inserted');
+    console.log('✓ Sample companies inserted');
 
-    // Sample Employees
+    // Sample employees
     await connection.query(`
-      INSERT IGNORE INTO EMPLOYEE (Name, Gender, Address, Dob, Doj, Department_No, Since, Salary, Email, Phone) VALUES
-      ('John Smith', 'Male', '123 Main St, City', '1985-05-15', '2020-01-15', 'D002', '2020-01-15', 75000.00, 'john.smith@company.com', '555-0101'),
-      ('Sarah Johnson', 'Female', '456 Oak Ave, City', '1990-08-22', '2019-03-10', 'D001', '2019-03-10', 65000.00, 'sarah.johnson@company.com', '555-0102'),
-      ('Michael Chen', 'Male', '789 Pine Rd, City', '1988-11-30', '2021-06-01', 'D002', '2021-06-01', 80000.00, 'michael.chen@company.com', '555-0103'),
-      ('Emily Davis', 'Female', '321 Elm St, City', '1992-03-18', '2022-02-15', 'D003', '2022-02-15', 70000.00, 'emily.davis@company.com', '555-0104'),
-      ('David Wilson', 'Male', '654 Maple Dr, City', '1987-07-25', '2018-09-20', 'D004', '2018-09-20', 85000.00, 'david.wilson@company.com', '555-0105')
+      INSERT INTO employee (emp_name, street_no, city) VALUES 
+      ('John Smith', 123, 'New York'),
+      ('Jane Doe', 456, 'San Francisco'),
+      ('Bob Wilson', 789, 'Los Angeles'),
+      ('Alice Brown', 321, 'Seattle'),
+      ('Charlie Davis', 654, 'Austin'),
+      ('Eva Martinez', 987, 'New York'),
+      ('Frank Johnson', 111, 'San Francisco'),
+      ('Grace Lee', 222, 'Los Angeles')
     `);
-    console.log('Sample employees inserted');
+    console.log('✓ Sample employees inserted');
 
-    // Update department managers
+    // Sample works relationships
     await connection.query(`
-      UPDATE DEPARTMENT SET Manager_Id = 2, Manager_Start_Date = '2019-03-10' WHERE D_No = 'D001'
+      INSERT INTO works (emp_id, company_name, salary) VALUES 
+      (1, 'TechCorp', 75000),
+      (2, 'DataSoft', 85000),
+      (3, 'WebInnovate', 65000),
+      (4, 'CloudSystems', 90000),
+      (5, 'CodeMasters', 70000),
+      (6, 'TechCorp', 80000),
+      (7, 'DataSoft', 72000),
+      (8, 'WebInnovate', 68000)
     `);
-    await connection.query(`
-      UPDATE DEPARTMENT SET Manager_Id = 1, Manager_Start_Date = '2020-01-15' WHERE D_No = 'D002'
-    `);
-    await connection.query(`
-      UPDATE DEPARTMENT SET Manager_Id = 4, Manager_Start_Date = '2022-02-15' WHERE D_No = 'D003'
-    `);
-    console.log('Department managers assigned');
+    console.log('✓ Sample work relationships inserted');
 
-    // Sample Projects
+    // Sample manages relationships
     await connection.query(`
-      INSERT IGNORE INTO PROJECT (P_No, Name, Location, Department_No, Budget, Start_Date, Status) VALUES
-      ('P001', 'Employee Portal Development', 'Tech Park', 'D002', 150000.00, '2024-01-01', 'Active'),
-      ('P002', 'Recruitment System', 'Headquarters', 'D001', 80000.00, '2024-02-15', 'Active'),
-      ('P003', 'Sales CRM Implementation', 'Downtown Office', 'D003', 200000.00, '2024-03-01', 'Planning'),
-      ('P004', 'Financial Reporting System', 'Headquarters', 'D004', 120000.00, '2023-11-01', 'Active')
+      INSERT INTO manages (emp_id, manager_id) VALUES 
+      (2, 1),
+      (3, 1),
+      (5, 4),
+      (6, 1),
+      (7, 2),
+      (8, 3)
     `);
-    console.log('Sample projects inserted');
+    console.log('✓ Sample management relationships inserted');
 
-    // Sample Work Assignments
+    // Create admin user (password: admin123)
+    const hashedPassword = await bcrypt.hash('admin123', 10);
     await connection.query(`
-      INSERT IGNORE INTO WORKS_ON (Employee_Id, Project_No, Hours, Assignment_Date, Role) VALUES
-      (1, 'P001', 40.00, '2024-01-01', 'Lead Developer'),
-      (3, 'P001', 35.00, '2024-01-05', 'Developer'),
-      (2, 'P002', 30.00, '2024-02-15', 'Project Manager'),
-      (4, 'P003', 25.00, '2024-03-01', 'Sales Analyst'),
-      (5, 'P004', 40.00, '2023-11-01', 'Financial Analyst')
-    `);
-    console.log('Sample work assignments inserted');
+      INSERT INTO users (username, password, email, role, status) 
+      VALUES ('admin', ?, 'admin@company.com', 'Admin', 'Active')
+    `, [hashedPassword]);
+    console.log('✓ Admin user created (username: admin, password: admin123)');
 
-    // Sample Dependents
-    await connection.query(`
-      INSERT IGNORE INTO DEPENDENT (Employee_Id, D_name, Gender, Relationship, Date_of_Birth) VALUES
-      (1, 'Emma Smith', 'Female', 'Daughter', '2015-08-10'),
-      (1, 'Lisa Smith', 'Female', 'Spouse', '1986-12-05'),
-      (2, 'Tom Johnson', 'Male', 'Son', '2018-04-22'),
-      (5, 'Anna Wilson', 'Female', 'Spouse', '1989-09-15')
-    `);
-    console.log('Sample dependents inserted');
-
-    // Create default admin in EMPLOYEE table if not exists
-    const bcrypt = require('bcryptjs');
-    const adminPassword = await bcrypt.hash('admin123', 10);
-    await connection.query(`
-      INSERT IGNORE INTO EMPLOYEE (Name, Username, Email, Password, Role, Status)
-      VALUES ('Administrator', 'admin', 'admin@company.com', '${adminPassword}', 'Admin', 'Active')
-    `);
-    console.log('Default admin employee created (Username: admin, Password: admin123)');
-
-    console.log('\n✅ Database initialization completed successfully!');
+    console.log('\n========================================');
+    console.log('Database initialization completed!');
+    console.log('========================================');
+    console.log('\nTables created:');
+    console.log('  - company (company_name, city)');
+    console.log('  - employee (emp_id, emp_name, street_no, city)');
+    console.log('  - works (emp_id, company_name, salary)');
+    console.log('  - manages (emp_id, manager_id)');
+    console.log('  - users (authentication)');
+    console.log('\nDefault admin login:');
+    console.log('  Username: admin');
+    console.log('  Password: admin123');
 
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -223,11 +188,11 @@ async function initializeDatabase() {
   }
 }
 
-// Run initialization
+// Run if called directly
 if (require.main === module) {
   initializeDatabase()
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 }
 
-module.exports = initializeDatabase;
+module.exports = { initializeDatabase };

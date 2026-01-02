@@ -1,23 +1,18 @@
 {
   "name": "company-management-system",
-  "version": "1.0.0",
-  "description": "Professional Company Management System for Multiple Branches",
+  "version": "2.0.0",
+  "description": "Company Management System based on Company-Employee-Works-Manages Schema",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "init-db": "node database/init.js",
-    "migrate-photo": "node database/migrate-add-photo.js",
-    "update-admin": "node scripts/update-admin-and-users.js",
-    "vercel-build": "echo 'Build complete'",
-    "deploy": "vercel --prod",
-    "deploy-check": "node scripts/pre-deploy-check.js"
+    "init-db": "node database/init.js"
   },
   "keywords": [
     "company",
+    "employee",
     "management",
-    "erp",
-    "hr"
+    "mysql"
   ],
   "author": "",
   "license": "MIT",
@@ -27,11 +22,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "express-validator": "^7.0.1",
     "jsonwebtoken": "^9.0.2",
-    "minimist": "^1.2.8",
-    "mysql2": "^3.6.5",
-    "node-fetch": "^2.7.0"
+    "mysql2": "^3.6.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

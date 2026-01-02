@@ -8,108 +8,125 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
-
-// Gracefully handle invalid JSON in request bodies (return 400 instead of crashing)
-app.use((err, req, res, next) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    console.error('Invalid JSON received:', err.message);
-    return res.status(400).json({ error: 'Invalid JSON in request body' });
-  }
-  next(err);
-});
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Routes
+// Import routes
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const companyRoutes = require('./routes/companyRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
-const departmentRoutes = require('./routes/departmentRoutes');
-const projectRoutes = require('./routes/projectRoutes');
-const dependentRoutes = require('./routes/dependentRoutes');
-const configRoutes = require('./routes/configRoutes');
-const reportRoutes = require('./routes/reportRoutes');
+const worksRoutes = require('./routes/worksRoutes');
+const managesRoutes = require('./routes/managesRoutes');
 const { authenticateToken } = require('./middleware/authMiddleware');
 
-// Public routes (no authentication required)
+// Public routes
 app.use('/api/auth', authRoutes);
-app.use('/api/config', configRoutes);
 
-// Protected routes (authentication required)
+// Protected routes
 app.use('/api/users', userRoutes);
+app.use('/api/companies', authenticateToken, companyRoutes);
 app.use('/api/employees', authenticateToken, employeeRoutes);
-app.use('/api/departments', authenticateToken, departmentRoutes);
-app.use('/api/projects', authenticateToken, projectRoutes);
-app.use('/api/dependents', authenticateToken, dependentRoutes);
-app.use('/api/reports', authenticateToken, reportRoutes);
+app.use('/api/works', authenticateToken, worksRoutes);
+app.use('/api/manages', authenticateToken, managesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Company Management System API is running' });
+  res.json({
+    success: true,
+    status: 'OK',
+    message: 'Company Management System API is running',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Root endpoint
-app.get('/', (req, res) => {
+// Root API endpoint
+app.get('/api', (req, res) => {
   res.json({
-    message: 'Welcome to Company Management System API',
-    version: '2.0.0',
+    message: 'Company Management System API',
+    version: '1.0.0',
     endpoints: {
-      auth: '/api/auth (login, register)',
-      users: '/api/users (admin)',
-      employees: '/api/employees',
-      departments: '/api/departments',
-      projects: '/api/projects',
-      dependents: '/api/dependents'
-    },
-    note: 'Most endpoints require authentication'
+      auth: {
+        'POST /api/auth/login': 'Login user',
+        'POST /api/auth/register': 'Register user',
+        'POST /api/auth/change-password': 'Change password'
+      },
+      companies: {
+        'GET /api/companies': 'Get all companies',
+        'GET /api/companies/:name': 'Get company by name',
+        'GET /api/companies/:name/employees': 'Get company employees',
+        'POST /api/companies': 'Create company',
+        'PUT /api/companies/:name': 'Update company',
+        'DELETE /api/companies/:name': 'Delete company'
+      },
+      employees: {
+        'GET /api/employees': 'Get all employees',
+        'GET /api/employees/:id': 'Get employee by ID',
+        'GET /api/employees/:id/works': 'Get employee work history',
+        'GET /api/employees/:id/subordinates': 'Get employee subordinates',
+        'POST /api/employees': 'Create employee',
+        'PUT /api/employees/:id': 'Update employee',
+        'DELETE /api/employees/:id': 'Delete employee'
+      },
+      works: {
+        'GET /api/works': 'Get all work relationships',
+        'GET /api/works/stats': 'Get salary statistics',
+        'POST /api/works': 'Create work relationship',
+        'PUT /api/works/:empId/:companyName': 'Update salary',
+        'DELETE /api/works/:empId/:companyName': 'Delete work relationship'
+      },
+      manages: {
+        'GET /api/manages': 'Get all management relationships',
+        'GET /api/manages/managers': 'Get all managers',
+        'POST /api/manages': 'Create management relationship',
+        'DELETE /api/manages/:empId': 'Delete management relationship'
+      }
+    }
   });
+});
+
+// Root endpoint - serve index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  // Log full error for debugging (include stack)
-  console.error('Unhandled error:', err && err.stack ? err.stack : err);
-
-  const status = err && err.status ? err.status : 500;
-  const response = { error: { message: status === 500 ? 'Internal Server Error' : (err && err.message) || 'Error', status } };
-
-  // In non-production include details for easier debugging
-  if (process.env.NODE_ENV !== 'production') {
-    response.error.details = err && (err.message || err.stack);
-  }
-
-  res.status(status).json(response);
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Internal Server Error'
+  });
 });
 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
-    error: {
-      message: 'Route not found',
-      status: 404
-    }
+    success: false,
+    error: 'Route not found'
   });
 });
 
-// Check for critical environment variables and warn
-const requiredEnvs = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME', 'JWT_SECRET'];
-const missingEnvs = requiredEnvs.filter(k => !process.env[k]);
-if (missingEnvs.length > 0) {
-  console.warn('Warning: Missing environment variables:', missingEnvs.join(', '));
-  if (process.env.NODE_ENV === 'production') {
-    console.warn('Missing env vars in production can cause runtime failures. Please set them in your hosting provider.');
-  }
-}
-
+// Start server
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-  console.log(`📊 API Documentation: http://localhost:${PORT}/`);
-  console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`
+========================================
+  Company Management System
+========================================
+  Server running on port ${PORT}
+  
+  API Endpoints:
+  - http://localhost:${PORT}/api
+  - http://localhost:${PORT}/api/health
+  
+  Frontend:
+  - http://localhost:${PORT}
+========================================
+  `);
 });
 
 module.exports = app;
