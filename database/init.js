@@ -3,11 +3,13 @@ const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 async function initializeDatabase() {
+  const isCloud = process.env.DB_HOST && !process.env.DB_HOST.includes('localhost');
   const connection = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
-    port: process.env.DB_PORT || 3306
+    port: process.env.DB_PORT || 3306,
+    ssl: isCloud ? { rejectUnauthorized: false } : undefined
   });
 
   try {
