@@ -15,6 +15,9 @@
             --primary: #6366f1;
             --primary-dark: #4f46e5;
             --secondary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
             --gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         }
 
@@ -28,13 +31,13 @@
             padding: 20px;
         }
 
-        .login-container {
+        .auth-container {
             background: white;
             padding: 50px 40px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             width: 100%;
-            max-width: 420px;
+            max-width: 450px;
             animation: slideUp 0.5s ease;
         }
 
@@ -43,12 +46,12 @@
             to { transform: translateY(0); opacity: 1; }
         }
 
-        .login-header {
+        .auth-header {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 35px;
         }
 
-        .login-header h1 {
+        .auth-header h1 {
             font-size: 3rem;
             background: var(--gradient);
             -webkit-background-clip: text;
@@ -58,28 +61,69 @@
             font-weight: 800;
         }
 
-        .login-header p {
+        .auth-header p {
             color: #666;
             font-size: 1rem;
         }
 
+        .tabs {
+            display: flex;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            background: #f3f4f6;
+            padding: 5px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #666;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: var(--primary);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         .form-group {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             font-weight: 600;
             color: #374151;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
         }
 
         .form-group input {
             width: 100%;
             padding: 14px 18px;
             border: 2px solid #e5e7eb;
-            border-radius: 12px;
+            border-radius: 10px;
             font-size: 1rem;
             transition: all 0.3s;
             background: #f9fafb;
@@ -90,6 +134,12 @@
             border-color: var(--primary);
             background: white;
             box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
         }
 
         .btn {
@@ -115,10 +165,14 @@
             transform: translateY(0);
         }
 
-        .error-message {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 12px 15px;
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .message {
+            padding: 15px;
             border-radius: 10px;
             margin-bottom: 20px;
             display: none;
@@ -126,153 +180,260 @@
             text-align: center;
         }
 
-        .error-message.show {
+        .message.show {
             display: block;
             animation: shake 0.5s ease;
         }
 
+        .message.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .message.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .message.warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+
+        .message.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-10px); }
-            75% { transform: translateX(10px); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
         }
 
         .footer {
             text-align: center;
-            margin-top: 30px;
+            margin-top: 25px;
             padding-top: 20px;
             border-top: 1px solid #e5e7eb;
             color: #9ca3af;
             font-size: 0.85rem;
         }
 
-        .footer a {
-            color: var(--primary);
-            text-decoration: none;
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 30px;
         }
 
-        .demo-credentials {
-            background: #f0f9ff;
-            border: 1px solid #bae6fd;
-            padding: 15px;
-            border-radius: 10px;
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #e5e7eb;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .approval-notice {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-radius: 12px;
+            padding: 20px;
             margin-bottom: 25px;
             text-align: center;
-            font-size: 0.9rem;
         }
 
-        .demo-credentials strong {
-            color: var(--primary);
+        .approval-notice h3 {
+            color: #92400e;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .approval-notice p {
+            color: #78350f;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .password-requirements {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 5px;
         }
 
         .input-icon {
             position: relative;
         }
 
-        .input-icon input {
-            padding-left: 45px;
-        }
-
         .input-icon span {
             position: absolute;
-            left: 15px;
+            right: 15px;
             top: 50%;
             transform: translateY(-50%);
+            cursor: pointer;
             font-size: 1.2rem;
         }
 
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #e5e7eb;
-            border-top-color: var(--primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        @media (max-width: 500px) {
+            .auth-container {
+                padding: 30px 25px;
+            }
+            .form-row {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-header">
+    <div class="auth-container">
+        <div class="auth-header">
             <h1>26:07</h1>
             <p>Company Management System</p>
         </div>
 
-        <div class="demo-credentials">
-            Demo: <strong>admin</strong> / <strong>admin123</strong>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('login')">Sign In</button>
+            <button class="tab-btn" onclick="switchTab('register')">Register</button>
         </div>
 
-        <div id="errorMessage" class="error-message"></div>
-
-        <form id="loginForm" onsubmit="handleLogin(event)">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <div class="input-icon">
-                    <span>👤</span>
-                    <input type="text" id="username" name="username" required 
-                           placeholder="Enter your username" autocomplete="username">
+        <!-- Login Form -->
+        <div id="loginTab" class="tab-content active">
+            <div id="loginMessage" class="message"></div>
+            
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" required placeholder="Enter your username" autocomplete="username">
                 </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <div class="input-icon">
+                        <input type="password" id="loginPassword" required placeholder="Enter your password" autocomplete="current-password">
+                        <span onclick="togglePassword('loginPassword')">👁️</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn" id="loginBtn">Sign In</button>
+            </form>
+
+            <div id="loginLoading" class="loading">
+                <div class="spinner"></div>
+                <p>Signing in...</p>
+            </div>
+        </div>
+
+        <!-- Register Form -->
+        <div id="registerTab" class="tab-content">
+            <div class="approval-notice">
+                <h3>⚠️ Admin Approval Required</h3>
+                <p>New accounts require administrator approval before you can access the system. You will be notified once your account is approved.</p>
             </div>
 
-            <div class="form-group">
-                <label for="password">Password</label>
-                <div class="input-icon">
-                    <span>🔒</span>
-                    <input type="password" id="password" name="password" required 
-                           placeholder="Enter your password" autocomplete="current-password">
+            <div id="registerMessage" class="message"></div>
+
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="regFullName">Full Name *</label>
+                    <input type="text" id="regFullName" required placeholder="Enter your full name">
                 </div>
+
+                <div class="form-group">
+                    <label for="regEmail">Email Address *</label>
+                    <input type="email" id="regEmail" required placeholder="Enter your email">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="regUsername">Username *</label>
+                        <input type="text" id="regUsername" required placeholder="Choose username" minlength="3">
+                    </div>
+                    <div class="form-group">
+                        <label for="regPhone">Phone</label>
+                        <input type="tel" id="regPhone" placeholder="Phone number">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="regPassword">Password *</label>
+                    <div class="input-icon">
+                        <input type="password" id="regPassword" required placeholder="Create password" minlength="6">
+                        <span onclick="togglePassword('regPassword')">👁️</span>
+                    </div>
+                    <div class="password-requirements">Minimum 6 characters</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="regConfirmPassword">Confirm Password *</label>
+                    <input type="password" id="regConfirmPassword" required placeholder="Confirm password">
+                </div>
+
+                <button type="submit" class="btn" id="registerBtn">Submit Registration</button>
+            </form>
+
+            <div id="registerLoading" class="loading">
+                <div class="spinner"></div>
+                <p>Submitting registration...</p>
             </div>
-
-            <button type="submit" class="btn" id="loginBtn">
-                Sign In
-            </button>
-        </form>
-
-        <div id="loading" class="loading">
-            <div class="spinner"></div>
-            <p>Signing in...</p>
         </div>
 
         <div class="footer">
-            <p>© 2024 26:07 Company Management</p>
+            <p>© 2026 26:07 Company Management</p>
         </div>
     </div>
 
     <script>
         const API_URL = window.location.origin + '/api';
 
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tab + 'Tab').classList.add('active');
+            
+            // Clear messages
+            document.getElementById('loginMessage').classList.remove('show');
+            document.getElementById('registerMessage').classList.remove('show');
+        }
+
+        function togglePassword(inputId) {
+            const input = document.getElementById(inputId);
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        function showMessage(elementId, message, type = 'error') {
+            const el = document.getElementById(elementId);
+            el.textContent = message;
+            el.className = `message show ${type}`;
+        }
+
         async function handleLogin(e) {
             e.preventDefault();
             
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('errorMessage');
-            const loginBtn = document.getElementById('loginBtn');
-            const loading = document.getElementById('loading');
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
             const form = document.getElementById('loginForm');
+            const loading = document.getElementById('loginLoading');
+            const messageEl = document.getElementById('loginMessage');
             
-            // Show loading
+            messageEl.classList.remove('show');
             form.style.display = 'none';
             loading.style.display = 'block';
-            errorDiv.classList.remove('show');
             
             try {
                 const response = await fetch(`${API_URL}/auth/login`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
                 
@@ -280,15 +441,92 @@
                 
                 if (response.ok && data.token) {
                     localStorage.setItem('token', data.token);
-                    window.location.href = '/index.html';
+                    showMessage('loginMessage', 'Login successful! Redirecting...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/index.html';
+                    }, 500);
                 } else {
-                    throw new Error(data.message || 'Invalid credentials');
+                    form.style.display = 'block';
+                    loading.style.display = 'none';
+                    
+                    // Handle different status codes
+                    if (data.status === 'pending') {
+                        showMessage('loginMessage', data.message, 'warning');
+                    } else if (data.status === 'rejected') {
+                        showMessage('loginMessage', data.message, 'error');
+                    } else if (response.status === 423) {
+                        showMessage('loginMessage', data.message, 'warning');
+                    } else {
+                        showMessage('loginMessage', data.message || 'Login failed', 'error');
+                    }
                 }
             } catch (error) {
                 form.style.display = 'block';
                 loading.style.display = 'none';
-                errorDiv.textContent = error.message || 'Login failed. Please try again.';
-                errorDiv.classList.add('show');
+                showMessage('loginMessage', 'Connection error. Please try again.', 'error');
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            
+            const fullName = document.getElementById('regFullName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const username = document.getElementById('regUsername').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regConfirmPassword').value;
+            
+            const form = document.getElementById('registerForm');
+            const loading = document.getElementById('registerLoading');
+            const messageEl = document.getElementById('registerMessage');
+            
+            // Validation
+            if (password !== confirmPassword) {
+                showMessage('registerMessage', 'Passwords do not match', 'error');
+                return;
+            }
+            
+            if (password.length < 6) {
+                showMessage('registerMessage', 'Password must be at least 6 characters', 'error');
+                return;
+            }
+            
+            messageEl.classList.remove('show');
+            form.style.display = 'none';
+            loading.style.display = 'block';
+            
+            try {
+                const response = await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        full_name: fullName,
+                        email,
+                        username,
+                        phone: phone || null,
+                        password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                form.style.display = 'block';
+                loading.style.display = 'none';
+                
+                if (response.ok) {
+                    showMessage('registerMessage', 
+                        '✓ Registration submitted successfully! Your account is pending administrator approval. You will be able to login once approved.', 
+                        'success'
+                    );
+                    document.getElementById('registerForm').reset();
+                } else {
+                    showMessage('registerMessage', data.message || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                form.style.display = 'block';
+                loading.style.display = 'none';
+                showMessage('registerMessage', 'Connection error. Please try again.', 'error');
             }
         }
 
@@ -297,8 +535,8 @@
             window.location.href = '/index.html';
         }
 
-        // Focus username input
-        document.getElementById('username').focus();
+        // Focus first input
+        document.getElementById('loginUsername').focus();
     </script>
 </body>
 </html>

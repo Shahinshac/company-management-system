@@ -7,9 +7,11 @@ class Employee {
       SELECT e.*,
         GROUP_CONCAT(DISTINCT w.company_name) as companies,
         SUM(w.salary) as total_salary,
+        COUNT(DISTINCT w.company_name) as company_count,
         (SELECT emp_name FROM employee m 
          INNER JOIN manages mg ON m.emp_id = mg.manager_id 
-         WHERE mg.emp_id = e.emp_id) as manager_name
+         WHERE mg.emp_id = e.emp_id) as manager_name,
+        (SELECT manager_id FROM manages WHERE emp_id = e.emp_id) as manager_id
       FROM employee e
       LEFT JOIN works w ON e.emp_id = w.emp_id
       GROUP BY e.emp_id
@@ -32,21 +34,78 @@ class Employee {
     return rows[0];
   }
 
-  // Create new employee
+  // Create new employee with all fields
   static async create(employeeData) {
-    const { emp_name, street_no, city } = employeeData;
+    const {
+      emp_name, email, phone, street_no, street_name, city, state, zip_code, country,
+      date_of_birth, gender, marital_status, nationality, national_id, photo_url,
+      hire_date, job_title, department, employment_type, status,
+      emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+      bank_name, bank_account_number, bank_routing_number
+    } = employeeData;
+    
     const [result] = await db.query(`
-      INSERT INTO employee (emp_name, street_no, city) VALUES (?, ?, ?)
-    `, [emp_name, street_no || null, city || null]);
+      INSERT INTO employee (
+        emp_name, email, phone, street_no, street_name, city, state, zip_code, country,
+        date_of_birth, gender, marital_status, nationality, national_id, photo_url,
+        hire_date, job_title, department, employment_type, status,
+        emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+        bank_name, bank_account_number, bank_routing_number
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      emp_name, email || null, phone || null, street_no || null, street_name || null,
+      city || null, state || null, zip_code || null, country || null,
+      date_of_birth || null, gender || null, marital_status || null,
+      nationality || null, national_id || null, photo_url || null,
+      hire_date || null, job_title || null, department || null,
+      employment_type || 'Full-time', status || 'Active',
+      emergency_contact_name || null, emergency_contact_phone || null, emergency_contact_relation || null,
+      bank_name || null, bank_account_number || null, bank_routing_number || null
+    ]);
     return result.insertId;
   }
 
-  // Update employee
+  // Update employee with all fields
   static async update(id, employeeData) {
-    const { emp_name, street_no, city } = employeeData;
+    const {
+      emp_name, email, phone, street_no, street_name, city, state, zip_code, country,
+      date_of_birth, gender, marital_status, nationality, national_id, photo_url,
+      hire_date, job_title, department, employment_type, status,
+      emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+      bank_name, bank_account_number, bank_routing_number, manager_id
+    } = employeeData;
+    
     const [result] = await db.query(`
-      UPDATE employee SET emp_name = ?, street_no = ?, city = ? WHERE emp_id = ?
-    `, [emp_name, street_no || null, city || null, id]);
+      UPDATE employee SET
+        emp_name = ?, email = ?, phone = ?, street_no = ?, street_name = ?,
+        city = ?, state = ?, zip_code = ?, country = ?,
+        date_of_birth = ?, gender = ?, marital_status = ?, nationality = ?,
+        national_id = ?, photo_url = ?, hire_date = ?, job_title = ?,
+        department = ?, employment_type = ?, status = ?,
+        emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
+        bank_name = ?, bank_account_number = ?, bank_routing_number = ?
+      WHERE emp_id = ?
+    `, [
+      emp_name, email || null, phone || null, street_no || null, street_name || null,
+      city || null, state || null, zip_code || null, country || null,
+      date_of_birth || null, gender || null, marital_status || null,
+      nationality || null, national_id || null, photo_url || null,
+      hire_date || null, job_title || null, department || null,
+      employment_type || 'Full-time', status || 'Active',
+      emergency_contact_name || null, emergency_contact_phone || null, emergency_contact_relation || null,
+      bank_name || null, bank_account_number || null, bank_routing_number || null, id
+    ]);
+    
+    // Handle manager relationship
+    if (manager_id !== undefined) {
+      // Delete existing management relationship
+      await db.query('DELETE FROM manages WHERE emp_id = ?', [id]);
+      // Create new relationship if manager specified
+      if (manager_id) {
+        await db.query('INSERT INTO manages (emp_id, manager_id) VALUES (?, ?)', [id, manager_id]);
+      }
+    }
+    
     return result.affectedRows;
   }
 

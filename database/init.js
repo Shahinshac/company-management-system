@@ -24,6 +24,7 @@ async function initializeDatabase() {
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
     await connection.query('DROP TABLE IF EXISTS audit_log');
     await connection.query('DROP TABLE IF EXISTS settings');
+    await connection.query('DROP TABLE IF EXISTS dependent');
     await connection.query('DROP TABLE IF EXISTS manages');
     await connection.query('DROP TABLE IF EXISTS works');
     await connection.query('DROP TABLE IF EXISTS users');
@@ -36,19 +37,51 @@ async function initializeDatabase() {
       CREATE TABLE company (
         company_name VARCHAR(50) PRIMARY KEY,
         city VARCHAR(50) NOT NULL,
+        address TEXT,
+        phone VARCHAR(20),
+        email VARCHAR(100),
+        website VARCHAR(100),
+        industry VARCHAR(50),
+        founded_year INT,
+        description TEXT,
+        logo_url VARCHAR(500),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
     console.log('✓ COMPANY table created');
 
-    // Create EMPLOYEE table
+    // Create EMPLOYEE table with enhanced fields
     await connection.query(`
       CREATE TABLE employee (
         emp_id INT AUTO_INCREMENT PRIMARY KEY,
-        emp_name VARCHAR(50) NOT NULL,
+        emp_name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) UNIQUE,
+        phone VARCHAR(20),
         street_no INT,
+        street_name VARCHAR(100),
         city VARCHAR(50),
+        state VARCHAR(50),
+        zip_code VARCHAR(20),
+        country VARCHAR(50) DEFAULT 'USA',
+        date_of_birth DATE,
+        gender ENUM('Male', 'Female', 'Other'),
+        marital_status ENUM('Single', 'Married', 'Divorced', 'Widowed'),
+        nationality VARCHAR(50),
+        national_id VARCHAR(50),
+        photo_url VARCHAR(500),
+        hire_date DATE,
+        job_title VARCHAR(100),
+        department VARCHAR(100),
+        employment_type ENUM('Full-time', 'Part-time', 'Contract', 'Intern') DEFAULT 'Full-time',
+        status ENUM('Active', 'On Leave', 'Terminated', 'Retired') DEFAULT 'Active',
+        emergency_contact_name VARCHAR(100),
+        emergency_contact_phone VARCHAR(20),
+        emergency_contact_relation VARCHAR(50),
+        bank_name VARCHAR(100),
+        bank_account VARCHAR(50),
+        bank_routing VARCHAR(50),
+        notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
@@ -83,19 +116,50 @@ async function initializeDatabase() {
     `);
     console.log('✓ MANAGES table created');
 
-    // Create USERS table for authentication
+    // Create DEPENDENT table for employee dependents
+    await connection.query(`
+      CREATE TABLE dependent (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        emp_id INT NOT NULL,
+        dependent_name VARCHAR(100) NOT NULL,
+        relationship ENUM('Spouse', 'Child', 'Parent', 'Sibling', 'Other') NOT NULL,
+        date_of_birth DATE,
+        gender ENUM('Male', 'Female', 'Other'),
+        phone VARCHAR(20),
+        email VARCHAR(100),
+        address TEXT,
+        is_emergency_contact BOOLEAN DEFAULT FALSE,
+        health_insurance_id VARCHAR(50),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (emp_id) REFERENCES employee(emp_id) ON DELETE CASCADE
+      )
+    `);
+    console.log('✓ DEPENDENT table created');
+
+    // Create USERS table for authentication with approval system
     await connection.query(`
       CREATE TABLE users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(50) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         email VARCHAR(100) UNIQUE,
-        role ENUM('Admin', 'User') DEFAULT 'User',
-        status ENUM('Active', 'Inactive') DEFAULT 'Active',
+        full_name VARCHAR(100),
+        phone VARCHAR(20),
+        role ENUM('Admin', 'Manager', 'User') DEFAULT 'User',
+        status ENUM('Pending', 'Active', 'Suspended', 'Rejected') DEFAULT 'Pending',
+        approved_by INT,
+        approved_at TIMESTAMP NULL,
+        rejection_reason TEXT,
+        last_login TIMESTAMP NULL,
+        login_attempts INT DEFAULT 0,
+        locked_until TIMESTAMP NULL,
         emp_id INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (emp_id) REFERENCES employee(emp_id) ON DELETE SET NULL
+        FOREIGN KEY (emp_id) REFERENCES employee(emp_id) ON DELETE SET NULL,
+        FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
     console.log('✓ USERS table created');
@@ -130,8 +194,12 @@ async function initializeDatabase() {
     // Create indexes for better performance
     await connection.query('CREATE INDEX idx_employee_name ON employee(emp_name)');
     await connection.query('CREATE INDEX idx_employee_city ON employee(city)');
+    await connection.query('CREATE INDEX idx_employee_email ON employee(email)');
+    await connection.query('CREATE INDEX idx_employee_status ON employee(status)');
     await connection.query('CREATE INDEX idx_company_city ON company(city)');
     await connection.query('CREATE INDEX idx_works_salary ON works(salary)');
+    await connection.query('CREATE INDEX idx_dependent_emp ON dependent(emp_id)');
+    await connection.query('CREATE INDEX idx_users_status ON users(status)');
     await connection.query('CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id)');
     await connection.query('CREATE INDEX idx_audit_created ON audit_log(created_at)');
     console.log('✓ Indexes created');
@@ -143,35 +211,38 @@ async function initializeDatabase() {
       ('company_tagline', 'Excellence in Management'),
       ('currency', 'USD'),
       ('currency_symbol', '$'),
-      ('date_format', 'YYYY-MM-DD')
+      ('date_format', 'YYYY-MM-DD'),
+      ('require_approval', 'true'),
+      ('max_login_attempts', '5'),
+      ('session_timeout', '3600')
     `);
     console.log('✓ Default settings inserted');
 
     // Insert sample data
     console.log('\nInserting sample data...');
 
-    // Sample companies
+    // Sample companies with enhanced fields
     await connection.query(`
-      INSERT INTO company (company_name, city) VALUES 
-      ('TechCorp', 'New York'),
-      ('DataSoft', 'San Francisco'),
-      ('WebInnovate', 'Los Angeles'),
-      ('CloudSystems', 'Seattle'),
-      ('CodeMasters', 'Austin')
+      INSERT INTO company (company_name, city, address, phone, email, industry, founded_year, description) VALUES 
+      ('TechCorp', 'New York', '123 Tech Ave, Floor 5', '212-555-0100', 'info@techcorp.com', 'Technology', 2010, 'Leading technology solutions provider'),
+      ('DataSoft', 'San Francisco', '456 Data St, Suite 200', '415-555-0200', 'contact@datasoft.com', 'Software', 2015, 'Data analytics and software development'),
+      ('WebInnovate', 'Los Angeles', '789 Web Blvd', '310-555-0300', 'hello@webinnovate.com', 'Web Development', 2018, 'Innovative web solutions'),
+      ('CloudSystems', 'Seattle', '321 Cloud Way', '206-555-0400', 'support@cloudsystems.com', 'Cloud Computing', 2012, 'Enterprise cloud infrastructure'),
+      ('CodeMasters', 'Austin', '654 Code Lane', '512-555-0500', 'team@codemasters.com', 'Software', 2016, 'Custom software development')
     `);
     console.log('✓ Sample companies inserted');
 
-    // Sample employees
+    // Sample employees with enhanced fields
     await connection.query(`
-      INSERT INTO employee (emp_name, street_no, city) VALUES 
-      ('John Smith', 123, 'New York'),
-      ('Jane Doe', 456, 'San Francisco'),
-      ('Bob Wilson', 789, 'Los Angeles'),
-      ('Alice Brown', 321, 'Seattle'),
-      ('Charlie Davis', 654, 'Austin'),
-      ('Eva Martinez', 987, 'New York'),
-      ('Frank Johnson', 111, 'San Francisco'),
-      ('Grace Lee', 222, 'Los Angeles')
+      INSERT INTO employee (emp_name, email, phone, street_no, street_name, city, state, date_of_birth, gender, marital_status, hire_date, job_title, department, employment_type, status) VALUES 
+      ('John Smith', 'john.smith@company.com', '212-555-1001', 123, 'Main St', 'New York', 'NY', '1985-03-15', 'Male', 'Married', '2020-01-15', 'Senior Developer', 'Engineering', 'Full-time', 'Active'),
+      ('Jane Doe', 'jane.doe@company.com', '415-555-1002', 456, 'Market St', 'San Francisco', 'CA', '1990-07-22', 'Female', 'Single', '2019-06-01', 'Project Manager', 'Management', 'Full-time', 'Active'),
+      ('Bob Wilson', 'bob.wilson@company.com', '310-555-1003', 789, 'Sunset Blvd', 'Los Angeles', 'CA', '1988-11-30', 'Male', 'Married', '2021-03-20', 'UX Designer', 'Design', 'Full-time', 'Active'),
+      ('Alice Brown', 'alice.brown@company.com', '206-555-1004', 321, 'Pine St', 'Seattle', 'WA', '1992-04-18', 'Female', 'Single', '2020-08-10', 'DevOps Engineer', 'Operations', 'Full-time', 'Active'),
+      ('Charlie Davis', 'charlie.davis@company.com', '512-555-1005', 654, 'Congress Ave', 'Austin', 'TX', '1987-09-05', 'Male', 'Married', '2018-11-25', 'Tech Lead', 'Engineering', 'Full-time', 'Active'),
+      ('Eva Martinez', 'eva.martinez@company.com', '212-555-1006', 987, 'Broadway', 'New York', 'NY', '1993-01-12', 'Female', 'Single', '2022-02-14', 'Data Analyst', 'Analytics', 'Full-time', 'Active'),
+      ('Frank Johnson', 'frank.johnson@company.com', '415-555-1007', 111, 'Howard St', 'San Francisco', 'CA', '1986-06-28', 'Male', 'Married', '2019-09-15', 'Backend Developer', 'Engineering', 'Full-time', 'Active'),
+      ('Grace Lee', 'grace.lee@company.com', '310-555-1008', 222, 'Wilshire Blvd', 'Los Angeles', 'CA', '1991-12-03', 'Female', 'Single', '2021-07-01', 'Frontend Developer', 'Engineering', 'Full-time', 'Active')
     `);
     console.log('✓ Sample employees inserted');
 
@@ -201,11 +272,24 @@ async function initializeDatabase() {
     `);
     console.log('✓ Sample management relationships inserted');
 
-    // Create admin user (password: admin123)
+    // Sample dependents
+    await connection.query(`
+      INSERT INTO dependent (emp_id, dependent_name, relationship, date_of_birth, gender, is_emergency_contact) VALUES 
+      (1, 'Sarah Smith', 'Spouse', '1987-05-20', 'Female', TRUE),
+      (1, 'Tommy Smith', 'Child', '2015-08-10', 'Male', FALSE),
+      (1, 'Emma Smith', 'Child', '2018-03-25', 'Female', FALSE),
+      (3, 'Mary Wilson', 'Spouse', '1990-02-14', 'Female', TRUE),
+      (5, 'Linda Davis', 'Spouse', '1989-07-08', 'Female', TRUE),
+      (5, 'James Davis', 'Child', '2016-11-30', 'Male', FALSE),
+      (7, 'Susan Johnson', 'Spouse', '1988-04-12', 'Female', TRUE)
+    `);
+    console.log('✓ Sample dependents inserted');
+
+    // Create admin user (password: admin123) - already approved
     const hashedPassword = await bcrypt.hash('admin123', 10);
     await connection.query(`
-      INSERT INTO users (username, password, email, role, status) 
-      VALUES ('admin', ?, 'admin@company.com', 'Admin', 'Active')
+      INSERT INTO users (username, password, email, full_name, role, status, approved_at) 
+      VALUES ('admin', ?, 'admin@26-07.com', 'System Administrator', 'Admin', 'Active', NOW())
     `, [hashedPassword]);
     console.log('✓ Admin user created (username: admin, password: admin123)');
 
@@ -213,14 +297,18 @@ async function initializeDatabase() {
     console.log('Database initialization completed!');
     console.log('========================================');
     console.log('\nTables created:');
-    console.log('  - company (company_name, city)');
-    console.log('  - employee (emp_id, emp_name, street_no, city)');
+    console.log('  - company (with address, phone, email, industry, etc.)');
+    console.log('  - employee (with photo, DOB, contact, bank info, etc.)');
+    console.log('  - dependent (employee dependents/family)');
     console.log('  - works (emp_id, company_name, salary)');
     console.log('  - manages (emp_id, manager_id)');
-    console.log('  - users (authentication)');
+    console.log('  - users (with approval system)');
+    console.log('  - settings (system configuration)');
+    console.log('  - audit_log (activity tracking)');
     console.log('\nDefault admin login:');
     console.log('  Username: admin');
     console.log('  Password: admin123');
+    console.log('\nNote: New users require admin approval before login.');
 
   } catch (error) {
     console.error('Error initializing database:', error);

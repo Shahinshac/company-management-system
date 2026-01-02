@@ -6,6 +6,7 @@ class Company {
     const [rows] = await db.query(`
       SELECT c.*, 
         (SELECT COUNT(*) FROM works w WHERE w.company_name = c.company_name) as employee_count,
+        (SELECT SUM(w.salary) FROM works w WHERE w.company_name = c.company_name) as total_salary,
         (SELECT AVG(w.salary) FROM works w WHERE w.company_name = c.company_name) as avg_salary
       FROM company c
       ORDER BY c.company_name
@@ -26,21 +27,25 @@ class Company {
     return rows[0];
   }
 
-  // Create new company
+  // Create new company with all fields
   static async create(companyData) {
-    const { company_name, city } = companyData;
+    const { company_name, city, address, phone, email, industry, founded_year, description, logo_url } = companyData;
     const [result] = await db.query(`
-      INSERT INTO company (company_name, city) VALUES (?, ?)
-    `, [company_name, city]);
+      INSERT INTO company (company_name, city, address, phone, email, industry, founded_year, description, logo_url) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [company_name, city, address || null, phone || null, email || null, industry || null, founded_year || null, description || null, logo_url || null]);
     return result.affectedRows;
   }
 
-  // Update company
+  // Update company with all fields
   static async update(oldName, companyData) {
-    const { company_name, city } = companyData;
+    const { company_name, city, address, phone, email, industry, founded_year, description, logo_url } = companyData;
     const [result] = await db.query(`
-      UPDATE company SET company_name = ?, city = ? WHERE company_name = ?
-    `, [company_name, city, oldName]);
+      UPDATE company SET 
+        company_name = ?, city = ?, address = ?, phone = ?, email = ?, 
+        industry = ?, founded_year = ?, description = ?, logo_url = ?
+      WHERE company_name = ?
+    `, [company_name, city, address || null, phone || null, email || null, industry || null, founded_year || null, description || null, logo_url || null, oldName]);
     return result.affectedRows;
   }
 
