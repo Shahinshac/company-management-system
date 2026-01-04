@@ -1051,11 +1051,31 @@ async function reactivateUser(userId) {
 
 async function deleteUser(userId) {
     if (!confirm('Delete this user permanently?')) return;
+    
+    // Prevent deleting your own account
+    if (currentUser && currentUser.id === userId) {
+        showToast('You cannot delete your own account!', 'error');
+        return;
+    }
+    
     try {
-        await api(`/auth/users/${userId}`, 'DELETE');
-        showToast('User deleted');
-        loadUsers();
+        const res = await api(`/auth/users/${userId}`, 'DELETE');
+        if (res.success) {
+            showToast('User deleted');
+            // Reload user lists directly without re-checking auth
+            const [pendingRes, usersRes] = await Promise.all([
+                api('/auth/pending-users'),
+                api('/auth/users')
+            ]);
+            pendingUsers = pendingRes.users || [];
+            allUsers = usersRes.users || [];
+            renderPendingUsers(pendingUsers);
+            renderAllUsers(allUsers);
+        } else {
+            showToast(res.message || 'Error deleting user', 'error');
+        }
     } catch (error) {
+        console.error('Delete user error:', error);
         showToast('Error deleting user', 'error');
     }
 }
@@ -1626,12 +1646,22 @@ let currentDocTab = 'all';
 
 async function loadDocuments() {
     try {
+        console.log('Loading documents...');
         const res = await api('/documents');
+        console.log('Documents response:', res);
         allDocuments = res.data || [];
+        console.log('Documents count:', allDocuments.length);
         renderDocuments(allDocuments);
         populateDocEmployeeDropdown();
+        
+        // Load employees if not loaded
+        if (allEmployees.length === 0) {
+            const empRes = await api('/employees');
+            allEmployees = empRes.data || [];
+        }
     } catch (error) {
-        showToast('Error loading documents', 'error');
+        console.error('Documents error:', error);
+        showToast('Error loading documents: ' + error.message, 'error');
     }
 }
 
