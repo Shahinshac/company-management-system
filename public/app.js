@@ -47,11 +47,25 @@ function showToast(message, type = 'success') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-// Format currency
-function formatCurrency(amount) {
-    const curr = settings.currency || 'USD';
-    const symbols = { USD: '$', EUR: '€', GBP: '£', INR: '₹' };
-    return `${symbols[curr] || '$'}${Number(amount || 0).toLocaleString()}`;
+// Format currency - supports multi-currency based on branch location
+function formatCurrency(amount, city = null) {
+    // Branch-specific currencies
+    const branchCurrencies = {
+        'Malappuram': { currency: 'INR', symbol: '₹' },
+        'Kochi': { currency: 'INR', symbol: '₹' },
+        'Bangalore': { currency: 'INR', symbol: '₹' },
+        'Dubai': { currency: 'AED', symbol: 'د.إ' },
+        'London': { currency: 'GBP', symbol: '£' }
+    };
+    
+    // If city is provided, use branch-specific currency
+    if (city && branchCurrencies[city]) {
+        return `${branchCurrencies[city].symbol}${Number(amount || 0).toLocaleString()}`;
+    }
+    
+    // Default to INR
+    const symbol = settings.currencySymbol || settings.currency_symbol || '₹';
+    return `${symbol}${Number(amount || 0).toLocaleString()}`;
 }
 
 // Format date
@@ -90,9 +104,14 @@ function showPage(pageId) {
         dashboard: 'Dashboard',
         companies: 'Companies',
         employees: 'Employees',
+        departments: 'Departments',
         dependents: 'Dependents',
         works: 'Work Assignments',
         manages: 'Management',
+        leaves: 'Leave Management',
+        attendance: 'Attendance',
+        documents: 'Documents',
+        performance: 'Performance',
         reports: 'Reports & Analytics',
         users: 'User Management',
         settings: 'Settings'
@@ -102,9 +121,14 @@ function showPage(pageId) {
     if (pageId === 'dashboard') loadDashboard();
     if (pageId === 'companies') loadCompanies();
     if (pageId === 'employees') loadEmployees();
+    if (pageId === 'departments') loadDepartments();
     if (pageId === 'dependents') loadDependents();
     if (pageId === 'works') loadWorks();
     if (pageId === 'manages') loadManages();
+    if (pageId === 'leaves') loadLeaves();
+    if (pageId === 'attendance') loadAttendance();
+    if (pageId === 'documents') loadDocuments();
+    if (pageId === 'performance') loadPerformance();
     if (pageId === 'reports') loadReports();
     if (pageId === 'users') loadUsers();
     if (pageId === 'settings') loadSettings();
@@ -117,11 +141,14 @@ function closeModal(id) { document.getElementById(id).classList.remove('active')
 // ===================== DASHBOARD =====================
 async function loadDashboard() {
     try {
-        const [companiesRes, employeesRes, worksRes, dependentsRes] = await Promise.all([
+        const [companiesRes, employeesRes, worksRes, dependentsRes, leavesRes, birthdaysRes, anniversariesRes] = await Promise.all([
             api('/companies'),
             api('/employees'),
             api('/works'),
-            api('/dependents')
+            api('/dependents'),
+            api('/leaves/stats').catch(() => ({ data: {} })),
+            api('/notifications/birthdays').catch(() => ({ data: [] })),
+            api('/notifications/anniversaries').catch(() => ({ data: [] }))
         ]);
         
         allCompanies = companiesRes.data || [];
@@ -135,6 +162,15 @@ async function loadDashboard() {
         document.getElementById('statEmployees').textContent = allEmployees.length;
         document.getElementById('statPayroll').textContent = formatCurrency(totalPayroll);
         document.getElementById('statDependents').textContent = allDependents.length;
+        document.getElementById('statLeavesPending').textContent = leavesRes.data?.pending || 0;
+        
+        // Get document stats
+        try {
+            const docStats = await api('/documents/stats');
+            document.getElementById('statDocExpiring').textContent = (docStats.data?.expiring_soon || 0) + (docStats.data?.expired || 0);
+        } catch(e) {
+            document.getElementById('statDocExpiring').textContent = '0';
+        }
         
         // Recent employees with photos
         const recentHtml = allEmployees.slice(0, 6).map(e => `
@@ -156,6 +192,42 @@ async function loadDashboard() {
         `).join('') || '<div class="empty-state"><span>👥</span><p>No employees yet</p></div>';
         
         document.getElementById('recentEmployees').innerHTML = recentHtml;
+        
+        // Upcoming Birthdays
+        const birthdays = birthdaysRes.data || [];
+        const birthdayHtml = birthdays.length > 0 ? birthdays.slice(0, 5).map(b => {
+            const bday = new Date(b.date_of_birth);
+            const today = new Date();
+            const nextBday = new Date(today.getFullYear(), bday.getMonth(), bday.getDate());
+            if (nextBday < today) nextBday.setFullYear(today.getFullYear() + 1);
+            const daysUntil = Math.ceil((nextBday - today) / (1000 * 60 * 60 * 24));
+            return `<div class="dependent-item">
+                <div class="dependent-info">
+                    <h4>🎂 ${b.emp_name}</h4>
+                    <p>${b.department || 'Employee'} • ${formatDate(b.date_of_birth)}</p>
+                </div>
+                <span class="badge ${daysUntil === 0 ? 'badge-success' : 'badge-info'}">${daysUntil === 0 ? 'Today!' : daysUntil + ' days'}</span>
+            </div>`;
+        }).join('') : '<p style="text-align:center;color:#666;padding:20px">No upcoming birthdays</p>';
+        document.getElementById('upcomingBirthdays').innerHTML = birthdayHtml;
+        
+        // Work Anniversaries
+        const anniversaries = anniversariesRes.data || [];
+        const anniversaryHtml = anniversaries.length > 0 ? anniversaries.slice(0, 5).map(a => {
+            const hireDate = new Date(a.hire_date);
+            const today = new Date();
+            const nextAnniv = new Date(today.getFullYear(), hireDate.getMonth(), hireDate.getDate());
+            if (nextAnniv < today) nextAnniv.setFullYear(today.getFullYear() + 1);
+            const daysUntil = Math.ceil((nextAnniv - today) / (1000 * 60 * 60 * 24));
+            return `<div class="dependent-item">
+                <div class="dependent-info">
+                    <h4>🎉 ${a.emp_name}</h4>
+                    <p>${a.years || 1} year(s) • ${a.department || 'Employee'}</p>
+                </div>
+                <span class="badge ${daysUntil === 0 ? 'badge-success' : 'badge-info'}">${daysUntil === 0 ? 'Today!' : daysUntil + ' days'}</span>
+            </div>`;
+        }).join('') : '<p style="text-align:center;color:#666;padding:20px">No upcoming anniversaries</p>';
+        document.getElementById('upcomingAnniversaries').innerHTML = anniversaryHtml;
     } catch (error) {
         console.error('Dashboard error:', error);
     }
@@ -1094,3 +1166,907 @@ async function loadPendingCount() {
 // Start the app
 init();
 
+// ===================== DEPARTMENTS =====================
+let allDepartments = [];
+
+async function loadDepartments() {
+    try {
+        const res = await api('/departments');
+        allDepartments = res.data || [];
+        renderDepartments(allDepartments);
+    } catch (error) {
+        showToast('Error loading departments', 'error');
+    }
+}
+
+function renderDepartments(departments) {
+    const html = departments.map(d => `
+        <tr>
+            <td><strong>${d.name}</strong>${d.description ? `<br><small style="color:#666">${d.description}</small>` : ''}</td>
+            <td>${d.head_name || '-'}</td>
+            <td>${d.employee_count || 0}</td>
+            <td>${formatCurrency(d.budget || 0)}</td>
+            <td><span class="badge ${d.status === 'Active' ? 'badge-success' : 'badge-danger'}">${d.status}</span></td>
+            <td class="actions">
+                <button class="btn btn-small btn-secondary" onclick='editDepartment(${JSON.stringify(d).replace(/'/g, "\\'")})'>Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteDepartment(${d.id})">Delete</button>
+            </td>
+        </tr>
+    `).join('') || '<tr><td colspan="6" class="empty-state">No departments found</td></tr>';
+    document.getElementById('departmentsTable').innerHTML = html;
+}
+
+function searchDepartments() {
+    const q = document.getElementById('departmentSearch').value.toLowerCase();
+    renderDepartments(allDepartments.filter(d => 
+        d.name.toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q)
+    ));
+}
+
+function openDepartmentModal(dept = null) {
+    document.getElementById('departmentModalTitle').textContent = dept ? 'Edit Department' : 'Add Department';
+    document.getElementById('departmentId').value = dept?.id || '';
+    document.getElementById('deptName').value = dept?.name || '';
+    document.getElementById('deptDescription').value = dept?.description || '';
+    document.getElementById('deptLocation').value = dept?.location || '';
+    document.getElementById('deptBudget').value = dept?.budget || '';
+    document.getElementById('deptStatus').value = dept?.status || 'Active';
+    
+    // Populate head dropdown
+    const headSelect = document.getElementById('deptHead');
+    headSelect.innerHTML = '<option value="">-- Select --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}" ${dept?.head_id == e.emp_id ? 'selected' : ''}>${e.emp_name}</option>`).join('');
+    
+    openModal('departmentModal');
+}
+
+function editDepartment(dept) {
+    openDepartmentModal(dept);
+}
+
+async function saveDepartment(e) {
+    e.preventDefault();
+    const id = document.getElementById('departmentId').value;
+    const data = {
+        name: document.getElementById('deptName').value,
+        description: document.getElementById('deptDescription').value,
+        head_id: document.getElementById('deptHead').value || null,
+        location: document.getElementById('deptLocation').value,
+        budget: parseFloat(document.getElementById('deptBudget').value) || 0,
+        status: document.getElementById('deptStatus').value
+    };
+    
+    try {
+        if (id) {
+            await api(`/departments/${id}`, 'PUT', data);
+        } else {
+            await api('/departments', 'POST', data);
+        }
+        closeModal('departmentModal');
+        loadDepartments();
+        showToast('Department saved successfully');
+    } catch (error) {
+        showToast('Error saving department', 'error');
+    }
+}
+
+async function deleteDepartment(id) {
+    if (!confirm('Delete this department?')) return;
+    try {
+        await api(`/departments/${id}`, 'DELETE');
+        loadDepartments();
+        showToast('Department deleted');
+    } catch (error) {
+        showToast('Error deleting department', 'error');
+    }
+}
+
+// ===================== LEAVE MANAGEMENT =====================
+let allLeaves = [];
+let allHolidays = [];
+let currentLeaveId = null;
+
+async function loadLeaves() {
+    try {
+        const res = await api('/leaves');
+        allLeaves = res.data || [];
+        renderLeaves(allLeaves);
+        populateLeaveEmployeeDropdowns();
+    } catch (error) {
+        showToast('Error loading leaves', 'error');
+    }
+}
+
+function renderLeaves(leaves) {
+    const html = leaves.map(l => {
+        const days = Math.ceil((new Date(l.end_date) - new Date(l.start_date)) / (1000*60*60*24)) + 1;
+        const statusClass = l.status === 'Approved' ? 'badge-success' : l.status === 'Rejected' ? 'badge-danger' : 'badge-warning';
+        return `<tr>
+            <td>${l.emp_name || 'Unknown'}</td>
+            <td>${l.leave_type}</td>
+            <td>${formatDate(l.start_date)}</td>
+            <td>${formatDate(l.end_date)}</td>
+            <td>${l.half_day ? '0.5' : days}</td>
+            <td><span class="badge ${statusClass}">${l.status}</span></td>
+            <td class="actions">
+                ${l.status === 'Pending' ? `<button class="btn btn-small btn-success" onclick="openLeaveApproval(${l.id})">Review</button>` : ''}
+                <button class="btn btn-small btn-danger" onclick="deleteLeave(${l.id})">Delete</button>
+            </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="7" class="empty-state">No leave requests</td></tr>';
+    document.getElementById('leavesTable').innerHTML = html;
+}
+
+function switchLeaveTab(tab) {
+    document.querySelectorAll('#leaves .tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    document.getElementById('leaveRequestsSection').style.display = tab === 'requests' ? 'block' : 'none';
+    document.getElementById('leaveBalanceSection').style.display = tab === 'balance' ? 'block' : 'none';
+    document.getElementById('holidaysSection').style.display = tab === 'holidays' ? 'block' : 'none';
+    
+    if (tab === 'balance') loadLeaveBalance();
+    if (tab === 'holidays') loadHolidays();
+}
+
+async function loadLeaveBalance() {
+    if (allEmployees.length === 0) {
+        const res = await api('/employees');
+        allEmployees = res.data || [];
+    }
+    
+    // Show balance for first employee (in real app, would be current user's employee)
+    if (allEmployees.length > 0) {
+        const balanceRes = await api(`/leaves/balance/${allEmployees[0].emp_id}`);
+        const balances = balanceRes.data || [];
+        
+        const html = balances.map(b => `
+            <div class="stat-card ${b.used_days >= b.total_days ? 'orange' : 'green'}">
+                <h3>${b.total_days - (b.used_days || 0)}</h3>
+                <p>${b.leave_type} Leave</p>
+                <small style="color:#666">Used: ${b.used_days || 0} / ${b.total_days} days</small>
+            </div>
+        `).join('');
+        document.getElementById('leaveBalanceCards').innerHTML = html || '<p>No balance data</p>';
+    }
+}
+
+async function loadHolidays() {
+    try {
+        const res = await api('/leaves/holidays');
+        allHolidays = res.data || [];
+        
+        const html = allHolidays.map(h => `
+            <tr>
+                <td>${formatDate(h.date)}</td>
+                <td><strong>${h.name}</strong>${h.description ? `<br><small>${h.description}</small>` : ''}</td>
+                <td><span class="badge badge-info">${h.type}</span></td>
+                <td>${h.applicable_branches || 'All'}</td>
+                <td><button class="btn btn-small btn-danger" onclick="deleteHoliday(${h.id})">Delete</button></td>
+            </tr>
+        `).join('') || '<tr><td colspan="5">No holidays</td></tr>';
+        document.getElementById('holidaysTable').innerHTML = html;
+    } catch (error) {
+        showToast('Error loading holidays', 'error');
+    }
+}
+
+function searchLeaves() {
+    const q = document.getElementById('leaveSearch').value.toLowerCase();
+    renderLeaves(allLeaves.filter(l => 
+        (l.emp_name || '').toLowerCase().includes(q) || l.leave_type.toLowerCase().includes(q)
+    ));
+}
+
+function filterLeaves() {
+    const status = document.getElementById('leaveStatusFilter').value;
+    renderLeaves(status ? allLeaves.filter(l => l.status === status) : allLeaves);
+}
+
+function populateLeaveEmployeeDropdowns() {
+    const options = '<option value="">-- Select --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
+    document.getElementById('leaveEmpId').innerHTML = options;
+}
+
+function openLeaveModal() {
+    document.getElementById('leaveId').value = '';
+    document.getElementById('leaveForm').reset();
+    populateLeaveEmployeeDropdowns();
+    openModal('leaveModal');
+}
+
+async function saveLeave(e) {
+    e.preventDefault();
+    const data = {
+        emp_id: document.getElementById('leaveEmpId').value,
+        leave_type: document.getElementById('leaveType').value,
+        start_date: document.getElementById('leaveStart').value,
+        end_date: document.getElementById('leaveEnd').value,
+        reason: document.getElementById('leaveReason').value,
+        half_day: document.getElementById('leaveHalfDay').checked
+    };
+    
+    try {
+        await api('/leaves', 'POST', data);
+        closeModal('leaveModal');
+        loadLeaves();
+        showToast('Leave request submitted');
+    } catch (error) {
+        showToast('Error submitting leave', 'error');
+    }
+}
+
+function openLeaveApproval(id) {
+    currentLeaveId = id;
+    const leave = allLeaves.find(l => l.id === id);
+    if (!leave) return;
+    
+    const days = Math.ceil((new Date(leave.end_date) - new Date(leave.start_date)) / (1000*60*60*24)) + 1;
+    document.getElementById('leaveApprovalDetails').innerHTML = `
+        <div class="dependent-item" style="flex-direction:column;align-items:flex-start;gap:10px">
+            <h4>${leave.emp_name}</h4>
+            <p><strong>Type:</strong> ${leave.leave_type}</p>
+            <p><strong>Duration:</strong> ${formatDate(leave.start_date)} to ${formatDate(leave.end_date)} (${leave.half_day ? '0.5' : days} days)</p>
+            <p><strong>Reason:</strong> ${leave.reason || 'Not specified'}</p>
+        </div>
+    `;
+    document.getElementById('leaveApprovalComments').value = '';
+    openModal('leaveApprovalModal');
+}
+
+async function approveLeave() {
+    try {
+        await api(`/leaves/${currentLeaveId}/status`, 'PUT', {
+            status: 'Approved',
+            comments: document.getElementById('leaveApprovalComments').value
+        });
+        closeModal('leaveApprovalModal');
+        loadLeaves();
+        showToast('Leave approved');
+    } catch (error) {
+        showToast('Error approving leave', 'error');
+    }
+}
+
+async function rejectLeave() {
+    try {
+        await api(`/leaves/${currentLeaveId}/status`, 'PUT', {
+            status: 'Rejected',
+            comments: document.getElementById('leaveApprovalComments').value
+        });
+        closeModal('leaveApprovalModal');
+        loadLeaves();
+        showToast('Leave rejected');
+    } catch (error) {
+        showToast('Error rejecting leave', 'error');
+    }
+}
+
+async function deleteLeave(id) {
+    if (!confirm('Delete this leave request?')) return;
+    try {
+        await api(`/leaves/${id}`, 'DELETE');
+        loadLeaves();
+        showToast('Leave deleted');
+    } catch (error) {
+        showToast('Error deleting leave', 'error');
+    }
+}
+
+function openHolidayModal() {
+    document.getElementById('holidayForm').reset();
+    openModal('holidayModal');
+}
+
+async function saveHoliday(e) {
+    e.preventDefault();
+    const data = {
+        name: document.getElementById('holidayName').value,
+        date: document.getElementById('holidayDate').value,
+        type: document.getElementById('holidayType').value,
+        description: document.getElementById('holidayDescription').value,
+        applicable_branches: document.getElementById('holidayBranches').value
+    };
+    
+    try {
+        await api('/leaves/holidays', 'POST', data);
+        closeModal('holidayModal');
+        loadHolidays();
+        showToast('Holiday added');
+    } catch (error) {
+        showToast('Error adding holiday', 'error');
+    }
+}
+
+async function deleteHoliday(id) {
+    if (!confirm('Delete this holiday?')) return;
+    try {
+        await api(`/leaves/holidays/${id}`, 'DELETE');
+        loadHolidays();
+        showToast('Holiday deleted');
+    } catch (error) {
+        showToast('Error deleting holiday', 'error');
+    }
+}
+
+// ===================== ATTENDANCE =====================
+let attendanceData = [];
+
+async function loadAttendance() {
+    // Populate employee dropdown
+    if (allEmployees.length === 0) {
+        const res = await api('/employees');
+        allEmployees = res.data || [];
+    }
+    
+    const options = '<option value="">-- Select Employee --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
+    document.getElementById('attendanceEmployee').innerHTML = options;
+    document.getElementById('attEmpId').innerHTML = options;
+    
+    // Set current month/year
+    document.getElementById('attendanceMonth').value = new Date().getMonth() + 1;
+    document.getElementById('attendanceYear').value = new Date().getFullYear();
+}
+
+async function loadAttendanceForEmployee() {
+    const empId = document.getElementById('attendanceEmployee').value;
+    if (!empId) {
+        document.getElementById('attendanceTable').innerHTML = '<tr><td colspan="5">Select an employee</td></tr>';
+        document.getElementById('attendanceSummary').innerHTML = '';
+        return;
+    }
+    
+    const month = document.getElementById('attendanceMonth').value;
+    const year = document.getElementById('attendanceYear').value;
+    
+    try {
+        const [attRes, summaryRes] = await Promise.all([
+            api(`/leaves/attendance/${empId}?month=${month}&year=${year}`),
+            api(`/leaves/attendance/${empId}/summary?month=${month}&year=${year}`)
+        ]);
+        
+        attendanceData = attRes.data || [];
+        const summary = summaryRes.data || {};
+        
+        // Render summary
+        document.getElementById('attendanceSummary').innerHTML = `
+            <div class="stat-card green"><h3>${summary.present || 0}</h3><p>Present</p></div>
+            <div class="stat-card orange"><h3>${summary.late || 0}</h3><p>Late</p></div>
+            <div class="stat-card purple"><h3>${summary.half_day || 0}</h3><p>Half Day</p></div>
+            <div class="stat-card blue"><h3>${summary.absent || 0}</h3><p>Absent</p></div>
+        `;
+        
+        // Render table
+        const html = attendanceData.map(a => {
+            const statusClass = a.status === 'Present' ? 'badge-success' : a.status === 'Absent' ? 'badge-danger' : 'badge-warning';
+            return `<tr>
+                <td>${formatDate(a.date)}</td>
+                <td>${a.check_in || '-'}</td>
+                <td>${a.check_out || '-'}</td>
+                <td><span class="badge ${statusClass}">${a.status}</span></td>
+                <td>${a.notes || '-'}</td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="5">No attendance records</td></tr>';
+        document.getElementById('attendanceTable').innerHTML = html;
+    } catch (error) {
+        showToast('Error loading attendance', 'error');
+    }
+}
+
+function openAttendanceModal() {
+    document.getElementById('attendanceForm').reset();
+    document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
+    openModal('attendanceModal');
+}
+
+async function saveAttendance(e) {
+    e.preventDefault();
+    const data = {
+        emp_id: document.getElementById('attEmpId').value,
+        date: document.getElementById('attDate').value,
+        check_in: document.getElementById('attCheckIn').value || null,
+        check_out: document.getElementById('attCheckOut').value || null,
+        status: document.getElementById('attStatus').value,
+        notes: document.getElementById('attNotes').value
+    };
+    
+    try {
+        await api('/leaves/attendance', 'POST', data);
+        closeModal('attendanceModal');
+        loadAttendanceForEmployee();
+        showToast('Attendance recorded');
+    } catch (error) {
+        showToast('Error recording attendance', 'error');
+    }
+}
+
+// ===================== DOCUMENTS =====================
+let allDocuments = [];
+let currentDocTab = 'all';
+
+async function loadDocuments() {
+    try {
+        const res = await api('/documents');
+        allDocuments = res.data || [];
+        renderDocuments(allDocuments);
+        populateDocEmployeeDropdown();
+    } catch (error) {
+        showToast('Error loading documents', 'error');
+    }
+}
+
+function renderDocuments(documents) {
+    const html = documents.map(d => {
+        const isExpired = d.expiry_date && new Date(d.expiry_date) < new Date();
+        const isExpiring = d.expiry_date && !isExpired && 
+            new Date(d.expiry_date) < new Date(Date.now() + 30*24*60*60*1000);
+        
+        return `<tr>
+            <td><strong>${d.name}</strong>${d.description ? `<br><small>${d.description}</small>` : ''}</td>
+            <td><span class="badge badge-info">${d.category}</span></td>
+            <td>${d.emp_name || 'Company'}</td>
+            <td>${d.expiry_date ? `<span class="${isExpired ? 'text-danger' : isExpiring ? 'text-warning' : ''}">${formatDate(d.expiry_date)}</span>` : '-'}</td>
+            <td>${d.is_verified ? '<span class="badge badge-success">✓ Verified</span>' : '<span class="badge badge-warning">Pending</span>'}</td>
+            <td class="actions">
+                <a href="${d.file_url}" target="_blank" class="btn btn-small btn-secondary">View</a>
+                ${!d.is_verified ? `<button class="btn btn-small btn-success" onclick="verifyDocument(${d.id})">Verify</button>` : ''}
+                <button class="btn btn-small btn-danger" onclick="deleteDocument(${d.id})">Delete</button>
+            </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty-state">No documents</td></tr>';
+    document.getElementById('documentsTable').innerHTML = html;
+}
+
+function switchDocTab(tab) {
+    currentDocTab = tab;
+    document.querySelectorAll('#documents .tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    if (tab === 'all') renderDocuments(allDocuments);
+    else if (tab === 'expiring') loadExpiringDocs();
+    else if (tab === 'expired') loadExpiredDocs();
+}
+
+async function loadExpiringDocs() {
+    try {
+        const res = await api('/documents/expiring');
+        renderDocuments(res.data || []);
+    } catch (error) {
+        showToast('Error loading documents', 'error');
+    }
+}
+
+async function loadExpiredDocs() {
+    try {
+        const res = await api('/documents/expired');
+        renderDocuments(res.data || []);
+    } catch (error) {
+        showToast('Error loading documents', 'error');
+    }
+}
+
+function searchDocuments() {
+    const q = document.getElementById('documentSearch').value.toLowerCase();
+    renderDocuments(allDocuments.filter(d => 
+        d.name.toLowerCase().includes(q) || (d.emp_name || '').toLowerCase().includes(q)
+    ));
+}
+
+function filterDocuments() {
+    const cat = document.getElementById('documentCategory').value;
+    renderDocuments(cat ? allDocuments.filter(d => d.category === cat) : allDocuments);
+}
+
+function populateDocEmployeeDropdown() {
+    const options = '<option value="">-- Company Document --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
+    document.getElementById('docEmpId').innerHTML = options;
+}
+
+function openDocumentModal() {
+    document.getElementById('documentId').value = '';
+    document.getElementById('documentForm').reset();
+    populateDocEmployeeDropdown();
+    openModal('documentModal');
+}
+
+async function saveDocument(e) {
+    e.preventDefault();
+    const id = document.getElementById('documentId').value;
+    const data = {
+        name: document.getElementById('docName').value,
+        category: document.getElementById('docCategory').value,
+        emp_id: document.getElementById('docEmpId').value || null,
+        file_url: document.getElementById('docUrl').value,
+        file_type: document.getElementById('docFileType').value,
+        expiry_date: document.getElementById('docExpiry').value || null,
+        description: document.getElementById('docDescription').value
+    };
+    
+    try {
+        if (id) {
+            await api(`/documents/${id}`, 'PUT', data);
+        } else {
+            await api('/documents', 'POST', data);
+        }
+        closeModal('documentModal');
+        loadDocuments();
+        showToast('Document saved');
+    } catch (error) {
+        showToast('Error saving document', 'error');
+    }
+}
+
+async function verifyDocument(id) {
+    try {
+        await api(`/documents/${id}/verify`, 'PUT');
+        loadDocuments();
+        showToast('Document verified');
+    } catch (error) {
+        showToast('Error verifying document', 'error');
+    }
+}
+
+async function deleteDocument(id) {
+    if (!confirm('Delete this document?')) return;
+    try {
+        await api(`/documents/${id}`, 'DELETE');
+        loadDocuments();
+        showToast('Document deleted');
+    } catch (error) {
+        showToast('Error deleting document', 'error');
+    }
+}
+
+// ===================== PERFORMANCE =====================
+let allReviews = [];
+let allGoals = [];
+
+async function loadPerformance() {
+    try {
+        const res = await api('/performance');
+        allReviews = res.data || [];
+        renderReviews(allReviews);
+        populatePerfEmployeeDropdowns();
+    } catch (error) {
+        showToast('Error loading performance data', 'error');
+    }
+}
+
+function renderReviews(reviews) {
+    const html = reviews.map(r => {
+        const statusClass = r.status === 'Completed' ? 'badge-success' : r.status === 'Submitted' ? 'badge-info' : 'badge-warning';
+        const rating = r.overall_rating ? `⭐ ${parseFloat(r.overall_rating).toFixed(1)}/5` : '-';
+        return `<tr>
+            <td>${r.emp_name}</td>
+            <td>${r.review_period || '-'}</td>
+            <td>${r.review_type}</td>
+            <td>${rating}</td>
+            <td><span class="badge ${statusClass}">${r.status}</span></td>
+            <td class="actions">
+                <button class="btn btn-small btn-secondary" onclick='editReview(${JSON.stringify(r).replace(/'/g, "\\'")})'>Edit</button>
+                ${r.status === 'Draft' ? `<button class="btn btn-small btn-success" onclick="submitReview(${r.id})">Submit</button>` : ''}
+                ${r.status === 'Submitted' ? `<button class="btn btn-small btn-success" onclick="completeReview(${r.id})">Complete</button>` : ''}
+                <button class="btn btn-small btn-danger" onclick="deleteReview(${r.id})">Delete</button>
+            </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty-state">No reviews</td></tr>';
+    document.getElementById('reviewsTable').innerHTML = html;
+}
+
+function switchPerfTab(tab) {
+    document.querySelectorAll('#performance .tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    document.getElementById('reviewsSection').style.display = tab === 'reviews' ? 'block' : 'none';
+    document.getElementById('goalsSection').style.display = tab === 'goals' ? 'block' : 'none';
+    
+    if (tab === 'goals') loadGoalsUI();
+}
+
+function populatePerfEmployeeDropdowns() {
+    const options = '<option value="">-- Select --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
+    document.getElementById('reviewEmpId').innerHTML = options;
+    document.getElementById('goalEmpId').innerHTML = options;
+    document.getElementById('goalsEmployee').innerHTML = options;
+}
+
+function loadGoalsUI() {
+    populatePerfEmployeeDropdowns();
+}
+
+async function loadGoalsForEmployee() {
+    const empId = document.getElementById('goalsEmployee').value;
+    if (!empId) {
+        document.getElementById('goalsContainer').innerHTML = '<p style="text-align:center;padding:20px">Select an employee to view goals</p>';
+        return;
+    }
+    
+    try {
+        const res = await api(`/performance/goals/${empId}`);
+        allGoals = res.data || [];
+        
+        const html = allGoals.length > 0 ? allGoals.map(g => {
+            const statusClass = g.status === 'Completed' ? 'badge-success' : g.status === 'Overdue' ? 'badge-danger' : 'badge-warning';
+            const progress = g.target_value && g.current_value ? 
+                Math.min(100, Math.round((parseFloat(g.current_value) / parseFloat(g.target_value)) * 100)) : 0;
+            return `<div class="dependent-item" style="flex-direction:column;align-items:stretch">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h4>${g.title}</h4>
+                    <span class="badge ${statusClass}">${g.status}</span>
+                </div>
+                <p style="color:#666;margin:5px 0">${g.description || 'No description'}</p>
+                <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#888">
+                    <span>📊 ${g.category} • ${g.priority} Priority</span>
+                    <span>📅 Due: ${g.due_date ? formatDate(g.due_date) : 'No date'}</span>
+                </div>
+                ${g.target_value ? `<div style="margin-top:10px">
+                    <div style="background:#e5e7eb;border-radius:10px;height:10px;overflow:hidden">
+                        <div style="background:var(--primary);height:100%;width:${progress}%"></div>
+                    </div>
+                    <small>${g.current_value || 0} / ${g.target_value} ${g.unit || ''} (${progress}%)</small>
+                </div>` : ''}
+                <div style="margin-top:10px;display:flex;gap:10px">
+                    <button class="btn btn-small btn-secondary" onclick='editGoal(${JSON.stringify(g).replace(/'/g, "\\'")})'>Edit</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteGoal(${g.id})">Delete</button>
+                </div>
+            </div>`;
+        }).join('') : '<p style="text-align:center;padding:20px">No goals set for this employee</p>';
+        
+        document.getElementById('goalsContainer').innerHTML = html;
+    } catch (error) {
+        showToast('Error loading goals', 'error');
+    }
+}
+
+function searchReviews() {
+    const q = document.getElementById('reviewSearch').value.toLowerCase();
+    renderReviews(allReviews.filter(r => 
+        r.emp_name.toLowerCase().includes(q) || (r.review_period || '').toLowerCase().includes(q)
+    ));
+}
+
+function openReviewModal() {
+    document.getElementById('reviewId').value = '';
+    document.getElementById('reviewForm').reset();
+    document.getElementById('reviewDate').value = new Date().toISOString().split('T')[0];
+    populatePerfEmployeeDropdowns();
+    openModal('reviewModal');
+}
+
+function editReview(review) {
+    document.getElementById('reviewId').value = review.id;
+    document.getElementById('reviewEmpId').value = review.emp_id;
+    document.getElementById('reviewPeriod').value = review.review_period || '';
+    document.getElementById('reviewType').value = review.review_type;
+    document.getElementById('reviewDate').value = review.review_date?.split('T')[0] || '';
+    document.getElementById('ratingOverall').value = review.overall_rating || '';
+    document.getElementById('ratingGoals').value = review.goals_rating || '';
+    document.getElementById('ratingSkills').value = review.skills_rating || '';
+    document.getElementById('ratingTeamwork').value = review.teamwork_rating || '';
+    document.getElementById('reviewStrengths').value = review.strengths || '';
+    document.getElementById('reviewImprovements').value = review.areas_for_improvement || '';
+    document.getElementById('reviewGoalsAchieved').value = review.goals_achieved || '';
+    document.getElementById('reviewNewGoals').value = review.new_goals || '';
+    populatePerfEmployeeDropdowns();
+    openModal('reviewModal');
+}
+
+async function saveReview(e) {
+    e.preventDefault();
+    const id = document.getElementById('reviewId').value;
+    const data = {
+        emp_id: document.getElementById('reviewEmpId').value,
+        review_period: document.getElementById('reviewPeriod').value,
+        review_type: document.getElementById('reviewType').value,
+        review_date: document.getElementById('reviewDate').value,
+        overall_rating: parseFloat(document.getElementById('ratingOverall').value) || null,
+        goals_rating: parseFloat(document.getElementById('ratingGoals').value) || null,
+        skills_rating: parseFloat(document.getElementById('ratingSkills').value) || null,
+        teamwork_rating: parseFloat(document.getElementById('ratingTeamwork').value) || null,
+        strengths: document.getElementById('reviewStrengths').value,
+        areas_for_improvement: document.getElementById('reviewImprovements').value,
+        goals_achieved: document.getElementById('reviewGoalsAchieved').value,
+        new_goals: document.getElementById('reviewNewGoals').value
+    };
+    
+    try {
+        if (id) {
+            await api(`/performance/${id}`, 'PUT', data);
+        } else {
+            await api('/performance', 'POST', data);
+        }
+        closeModal('reviewModal');
+        loadPerformance();
+        showToast('Review saved');
+    } catch (error) {
+        showToast('Error saving review', 'error');
+    }
+}
+
+async function submitReview(id) {
+    try {
+        await api(`/performance/${id}/submit`, 'PUT');
+        loadPerformance();
+        showToast('Review submitted');
+    } catch (error) {
+        showToast('Error submitting review', 'error');
+    }
+}
+
+async function completeReview(id) {
+    try {
+        await api(`/performance/${id}/complete`, 'PUT');
+        loadPerformance();
+        showToast('Review completed');
+    } catch (error) {
+        showToast('Error completing review', 'error');
+    }
+}
+
+async function deleteReview(id) {
+    if (!confirm('Delete this review?')) return;
+    try {
+        await api(`/performance/${id}`, 'DELETE');
+        loadPerformance();
+        showToast('Review deleted');
+    } catch (error) {
+        showToast('Error deleting review', 'error');
+    }
+}
+
+function openGoalModal() {
+    document.getElementById('goalId').value = '';
+    document.getElementById('goalForm').reset();
+    populatePerfEmployeeDropdowns();
+    
+    // Pre-select employee if one is selected in the filter
+    const selectedEmp = document.getElementById('goalsEmployee').value;
+    if (selectedEmp) {
+        document.getElementById('goalEmpId').value = selectedEmp;
+    }
+    
+    openModal('goalModal');
+}
+
+function editGoal(goal) {
+    document.getElementById('goalId').value = goal.id;
+    document.getElementById('goalEmpId').value = goal.emp_id;
+    document.getElementById('goalTitle').value = goal.title;
+    document.getElementById('goalDescription').value = goal.description || '';
+    document.getElementById('goalCategory').value = goal.category;
+    document.getElementById('goalPriority').value = goal.priority;
+    document.getElementById('goalTarget').value = goal.target_value || '';
+    document.getElementById('goalDue').value = goal.due_date?.split('T')[0] || '';
+    populatePerfEmployeeDropdowns();
+    openModal('goalModal');
+}
+
+async function saveGoal(e) {
+    e.preventDefault();
+    const id = document.getElementById('goalId').value;
+    const data = {
+        emp_id: document.getElementById('goalEmpId').value,
+        title: document.getElementById('goalTitle').value,
+        description: document.getElementById('goalDescription').value,
+        category: document.getElementById('goalCategory').value,
+        priority: document.getElementById('goalPriority').value,
+        target_value: document.getElementById('goalTarget').value || null,
+        due_date: document.getElementById('goalDue').value || null
+    };
+    
+    try {
+        if (id) {
+            await api(`/performance/goals/${id}`, 'PUT', data);
+        } else {
+            await api('/performance/goals', 'POST', data);
+        }
+        closeModal('goalModal');
+        loadGoalsForEmployee();
+        showToast('Goal saved');
+    } catch (error) {
+        showToast('Error saving goal', 'error');
+    }
+}
+
+async function deleteGoal(id) {
+    if (!confirm('Delete this goal?')) return;
+    try {
+        await api(`/performance/goals/${id}`, 'DELETE');
+        loadGoalsForEmployee();
+        showToast('Goal deleted');
+    } catch (error) {
+        showToast('Error deleting goal', 'error');
+    }
+}
+
+// ===================== EXPORT FUNCTIONALITY =====================
+function exportData() {
+    const modal = `
+        <div class="modal active" id="exportModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>📥 Export Data</h2>
+                    <button class="modal-close" onclick="closeModal('exportModal')">&times;</button>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:15px">
+                    <button class="btn btn-primary" onclick="exportToCSV('employees')">👥 Export Employees</button>
+                    <button class="btn btn-success" onclick="exportToCSV('companies')">🏢 Export Companies</button>
+                    <button class="btn btn-secondary" onclick="exportToCSV('works')">💼 Export Work Assignments</button>
+                    <button class="btn btn-warning" onclick="exportToCSV('leaves')">🏖️ Export Leaves</button>
+                    <button class="btn btn-info" onclick="exportToCSV('departments')">🏛️ Export Departments</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modal);
+}
+
+async function exportToCSV(type) {
+    try {
+        let data = [];
+        let filename = '';
+        
+        switch(type) {
+            case 'employees':
+                const empRes = await api('/employees');
+                data = empRes.data || [];
+                filename = 'employees.csv';
+                break;
+            case 'companies':
+                const compRes = await api('/companies');
+                data = compRes.data || [];
+                filename = 'companies.csv';
+                break;
+            case 'works':
+                const workRes = await api('/works');
+                data = workRes.data || [];
+                filename = 'work_assignments.csv';
+                break;
+            case 'leaves':
+                const leaveRes = await api('/leaves');
+                data = leaveRes.data || [];
+                filename = 'leaves.csv';
+                break;
+            case 'departments':
+                const deptRes = await api('/departments');
+                data = deptRes.data || [];
+                filename = 'departments.csv';
+                break;
+        }
+        
+        if (data.length === 0) {
+            showToast('No data to export', 'warning');
+            return;
+        }
+        
+        // Convert to CSV
+        const headers = Object.keys(data[0]);
+        const csv = [
+            headers.join(','),
+            ...data.map(row => headers.map(h => {
+                const val = row[h];
+                if (val === null || val === undefined) return '';
+                const str = String(val).replace(/"/g, '""');
+                return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+            }).join(','))
+        ].join('\n');
+        
+        // Download
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        closeModal('exportModal');
+        showToast(`${type} exported successfully`);
+    } catch (error) {
+        showToast('Error exporting data', 'error');
+    }
+}

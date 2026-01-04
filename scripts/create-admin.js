@@ -24,7 +24,7 @@ const bcrypt = require('bcryptjs');
 
     // create new admin
     const hash = await bcrypt.hash(password, 12);
-    const userId = await Employee.createAuthEmployee({ Username: username, Email: `${username}@example.com`, Role: 'Admin', passwordHash: hash, Name: name });
+    const userId = await Employee.createAuthEmployee({ Username: username, Email: `${username}@26-07.com`, Role: 'Admin', passwordHash: hash, Name: name });
     // clear force password change
     await Employee.setForcePasswordChange(userId, 0);
     await Employee.setStatus(userId, 'Active');

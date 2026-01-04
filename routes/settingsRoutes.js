@@ -15,10 +15,32 @@ router.get('/company', async (req, res) => {
       data: {
         name: '26:07',
         tagline: 'Company Management System',
-        currency: 'USD',
-        currencySymbol: '$'
+        currency: 'INR',
+        currencySymbol: '₹',
+        supportedCurrencies: 'INR,AED,GBP',
+        branchCurrencies: Settings.getSupportedCurrencies()
       }
     });
+  }
+});
+
+// Get supported currencies (public)
+router.get('/currencies', async (req, res) => {
+  try {
+    const currencies = Settings.getSupportedCurrencies();
+    res.json({ success: true, data: currencies });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get currency for a specific city/branch (public)
+router.get('/currency/:city', async (req, res) => {
+  try {
+    const currency = Settings.getCurrencyForCity(req.params.city);
+    res.json({ success: true, data: currency });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

@@ -1,5 +1,14 @@
 const db = require('../database/connection');
 
+// Currency configuration for each branch location
+const BRANCH_CURRENCIES = {
+  'Malappuram': { currency: 'INR', symbol: '₹' },
+  'Kochi': { currency: 'INR', symbol: '₹' },
+  'Bangalore': { currency: 'INR', symbol: '₹' },
+  'Dubai': { currency: 'AED', symbol: 'د.إ' },
+  'London': { currency: 'GBP', symbol: '£' }
+};
+
 class Settings {
   // Get all settings
   static async getAll() {
@@ -33,6 +42,20 @@ class Settings {
     return result.affectedRows;
   }
 
+  // Get currency for a specific branch/city
+  static getCurrencyForCity(city) {
+    return BRANCH_CURRENCIES[city] || { currency: 'INR', symbol: '₹' };
+  }
+
+  // Get all supported currencies
+  static getSupportedCurrencies() {
+    return [
+      { code: 'INR', symbol: '₹', name: 'Indian Rupee', locations: ['Malappuram', 'Kochi', 'Bangalore'] },
+      { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham', locations: ['Dubai'] },
+      { code: 'GBP', symbol: '£', name: 'British Pound', locations: ['London'] }
+    ];
+  }
+
   // Get company info
   static async getCompanyInfo() {
     return {
@@ -41,10 +64,12 @@ class Settings {
       email: await this.get('company_email', ''),
       phone: await this.get('company_phone', ''),
       address: await this.get('company_address', ''),
-      currency: await this.get('currency', 'USD'),
-      currencySymbol: await this.get('currency_symbol', '$'),
+      currency: await this.get('currency', 'INR'),
+      currencySymbol: await this.get('currency_symbol', '₹'),
+      supportedCurrencies: await this.get('supported_currencies', 'INR,AED,GBP'),
       dateFormat: await this.get('date_format', 'YYYY-MM-DD'),
-      logo: await this.get('company_logo', '')
+      logo: await this.get('company_logo', ''),
+      branchCurrencies: BRANCH_CURRENCIES
     };
   }
 

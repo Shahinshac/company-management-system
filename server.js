@@ -24,6 +24,11 @@ const managesRoutes = require('./routes/managesRoutes');
 const dependentRoutes = require('./routes/dependentRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const leaveRoutes = require('./routes/leaveRoutes');
+const departmentRoutes = require('./routes/departmentRoutes');
+const documentRoutes = require('./routes/documentRoutes');
+const performanceRoutes = require('./routes/performanceRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const { authenticateToken } = require('./middleware/authMiddleware');
 
 // Public routes
@@ -38,6 +43,11 @@ app.use('/api/works', authenticateToken, worksRoutes);
 app.use('/api/manages', authenticateToken, managesRoutes);
 app.use('/api/dependents', authenticateToken, dependentRoutes);
 app.use('/api/reports', authenticateToken, reportRoutes);
+app.use('/api/leaves', authenticateToken, leaveRoutes);
+app.use('/api/departments', authenticateToken, departmentRoutes);
+app.use('/api/documents', authenticateToken, documentRoutes);
+app.use('/api/performance', authenticateToken, performanceRoutes);
+app.use('/api/notifications', authenticateToken, notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
