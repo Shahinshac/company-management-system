@@ -147,6 +147,34 @@ class Leave {
     return rows;
   }
 
+  // Get all attendance records (for overview)
+  static async getAllAttendance(month, year) {
+    const [rows] = await db.query(`
+      SELECT a.*, e.emp_name, e.department, e.photo_url
+      FROM attendance a
+      JOIN employee e ON a.emp_id = e.emp_id
+      WHERE MONTH(a.date) = ? AND YEAR(a.date) = ?
+      ORDER BY a.date DESC, e.emp_name
+    `, [month, year]);
+    return rows;
+  }
+
+  // Get overall attendance summary
+  static async getOverallAttendanceSummary(month, year) {
+    const [summary] = await db.query(`
+      SELECT 
+        COUNT(DISTINCT emp_id) as total_employees,
+        COUNT(*) as total_records,
+        SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present,
+        SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent,
+        SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) as late,
+        SUM(CASE WHEN status = 'Half Day' THEN 1 ELSE 0 END) as half_day
+      FROM attendance
+      WHERE MONTH(date) = ? AND YEAR(date) = ?
+    `, [month, year]);
+    return summary[0];
+  }
+
   // Record attendance
   static async recordAttendance(data) {
     const [result] = await db.query(`

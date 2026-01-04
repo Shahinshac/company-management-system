@@ -135,6 +135,17 @@ class Performance {
     return rows;
   }
 
+  // Get all goals
+  static async getAllGoals() {
+    const [rows] = await db.query(`
+      SELECT g.*, e.emp_name, e.department, e.photo_url
+      FROM performance_goals g
+      JOIN employee e ON g.emp_id = e.emp_id
+      ORDER BY g.priority DESC, g.due_date ASC
+    `);
+    return rows;
+  }
+
   // Create goal
   static async createGoal(data) {
     const [result] = await db.query(`

@@ -56,6 +56,16 @@ router.get('/employee/:empId', async (req, res) => {
   }
 });
 
+// Get all goals (for overview)
+router.get('/goals', async (req, res) => {
+  try {
+    const goals = await Performance.getAllGoals();
+    res.json({ success: true, data: goals });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get goals by employee
 router.get('/goals/:empId', async (req, res) => {
   try {

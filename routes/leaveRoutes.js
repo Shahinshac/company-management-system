@@ -147,6 +147,34 @@ router.delete('/:id', async (req, res) => {
 
 // ===== ATTENDANCE ROUTES =====
 
+// Get all attendance for a month/year (overview)
+router.get('/attendance/all', async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    const attendance = await Leave.getAllAttendance(
+      month || new Date().getMonth() + 1,
+      year || new Date().getFullYear()
+    );
+    res.json({ success: true, data: attendance });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get overall attendance summary
+router.get('/attendance/summary', async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    const summary = await Leave.getOverallAttendanceSummary(
+      month || new Date().getMonth() + 1,
+      year || new Date().getFullYear()
+    );
+    res.json({ success: true, data: summary });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get attendance for employee
 router.get('/attendance/:empId', async (req, res) => {
   try {

@@ -1492,6 +1492,7 @@ async function deleteHoliday(id) {
 
 // ===================== ATTENDANCE =====================
 let attendanceData = [];
+let selectedAttendanceEmployee = '';
 
 async function loadAttendance() {
     // Populate employee dropdown
@@ -1500,32 +1501,41 @@ async function loadAttendance() {
         allEmployees = res.data || [];
     }
     
-    const options = '<option value="">-- Select Employee --</option>' + 
+    const options = '<option value="">All Employees</option>' + 
         allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
     document.getElementById('attendanceEmployee').innerHTML = options;
-    document.getElementById('attEmpId').innerHTML = options;
+    document.getElementById('attEmpId').innerHTML = '<option value="">-- Select --</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
     
     // Set current month/year
     document.getElementById('attendanceMonth').value = new Date().getMonth() + 1;
     document.getElementById('attendanceYear').value = new Date().getFullYear();
+    
+    // Load all attendance by default
+    await loadAttendanceForEmployee();
 }
 
 async function loadAttendanceForEmployee() {
     const empId = document.getElementById('attendanceEmployee').value;
-    if (!empId) {
-        document.getElementById('attendanceTable').innerHTML = '<tr><td colspan="5">Select an employee</td></tr>';
-        document.getElementById('attendanceSummary').innerHTML = '';
-        return;
-    }
-    
     const month = document.getElementById('attendanceMonth').value;
     const year = document.getElementById('attendanceYear').value;
     
     try {
-        const [attRes, summaryRes] = await Promise.all([
-            api(`/leaves/attendance/${empId}?month=${month}&year=${year}`),
-            api(`/leaves/attendance/${empId}/summary?month=${month}&year=${year}`)
-        ]);
+        let attRes, summaryRes;
+        
+        if (empId) {
+            // Load for specific employee
+            [attRes, summaryRes] = await Promise.all([
+                api(`/leaves/attendance/${empId}?month=${month}&year=${year}`),
+                api(`/leaves/attendance/${empId}/summary?month=${month}&year=${year}`)
+            ]);
+        } else {
+            // Load all attendance
+            [attRes, summaryRes] = await Promise.all([
+                api(`/leaves/attendance/all?month=${month}&year=${year}`),
+                api(`/leaves/attendance/summary?month=${month}&year=${year}`)
+            ]);
+        }
         
         attendanceData = attRes.data || [];
         const summary = summaryRes.data || {};
@@ -1535,22 +1545,34 @@ async function loadAttendanceForEmployee() {
             <div class="stat-card green"><h3>${summary.present || 0}</h3><p>Present</p></div>
             <div class="stat-card orange"><h3>${summary.late || 0}</h3><p>Late</p></div>
             <div class="stat-card purple"><h3>${summary.half_day || 0}</h3><p>Half Day</p></div>
-            <div class="stat-card blue"><h3>${summary.absent || 0}</h3><p>Absent</p></div>
+            <div class="stat-card red"><h3>${summary.absent || 0}</h3><p>Absent</p></div>
         `;
         
-        // Render table
-        const html = attendanceData.map(a => {
+        // Render table - show employee name when viewing all
+        const showEmpName = !empId;
+        const html = attendanceData.length > 0 ? attendanceData.map(a => {
             const statusClass = a.status === 'Present' ? 'badge-success' : a.status === 'Absent' ? 'badge-danger' : 'badge-warning';
             return `<tr>
+                ${showEmpName ? `<td>${a.emp_name || 'Unknown'}</td>` : ''}
                 <td>${formatDate(a.date)}</td>
                 <td>${a.check_in || '-'}</td>
                 <td>${a.check_out || '-'}</td>
                 <td><span class="badge ${statusClass}">${a.status}</span></td>
                 <td>${a.notes || '-'}</td>
             </tr>`;
-        }).join('') || '<tr><td colspan="5">No attendance records</td></tr>';
+        }).join('') : `<tr><td colspan="${showEmpName ? 6 : 5}">No attendance records for this period</td></tr>`;
+        
+        // Update table headers based on view
+        const tableHead = document.querySelector('#attendance table thead tr');
+        if (tableHead) {
+            tableHead.innerHTML = showEmpName 
+                ? '<th>Employee</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Status</th><th>Notes</th>'
+                : '<th>Date</th><th>Check In</th><th>Check Out</th><th>Status</th><th>Notes</th>';
+        }
+        
         document.getElementById('attendanceTable').innerHTML = html;
     } catch (error) {
+        console.error('Attendance error:', error);
         showToast('Error loading attendance', 'error');
     }
 }
@@ -1771,22 +1793,25 @@ function populatePerfEmployeeDropdowns() {
         allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
     document.getElementById('reviewEmpId').innerHTML = options;
     document.getElementById('goalEmpId').innerHTML = options;
-    document.getElementById('goalsEmployee').innerHTML = options;
+    document.getElementById('goalsEmployee').innerHTML = '<option value="">All Employees</option>' + 
+        allEmployees.map(e => `<option value="${e.emp_id}">${e.emp_name}</option>`).join('');
 }
 
-function loadGoalsUI() {
+async function loadGoalsUI() {
     populatePerfEmployeeDropdowns();
+    await loadGoalsForEmployee(); // Load all goals by default
 }
 
 async function loadGoalsForEmployee() {
     const empId = document.getElementById('goalsEmployee').value;
-    if (!empId) {
-        document.getElementById('goalsContainer').innerHTML = '<p style="text-align:center;padding:20px">Select an employee to view goals</p>';
-        return;
-    }
     
     try {
-        const res = await api(`/performance/goals/${empId}`);
+        let res;
+        if (empId) {
+            res = await api(`/performance/goals/${empId}`);
+        } else {
+            res = await api('/performance/goals');
+        }
         allGoals = res.data || [];
         
         const html = allGoals.length > 0 ? allGoals.map(g => {
@@ -1795,7 +1820,7 @@ async function loadGoalsForEmployee() {
                 Math.min(100, Math.round((parseFloat(g.current_value) / parseFloat(g.target_value)) * 100)) : 0;
             return `<div class="dependent-item" style="flex-direction:column;align-items:stretch">
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                    <h4>${g.title}</h4>
+                    <h4>${g.title}${g.emp_name ? ` <small style="color:#888;font-weight:normal">(${g.emp_name})</small>` : ''}</h4>
                     <span class="badge ${statusClass}">${g.status}</span>
                 </div>
                 <p style="color:#666;margin:5px 0">${g.description || 'No description'}</p>
