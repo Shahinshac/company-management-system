@@ -923,7 +923,8 @@ function switchUserTab(tab) {
 
 async function loadUsers() {
     if (currentUser?.role !== 'Admin') {
-        document.getElementById('usersNav').style.display = 'none';
+        const usersNav = document.getElementById('usersNav');
+        if (usersNav) usersNav.style.display = 'none';
         return;
     }
     
@@ -934,22 +935,37 @@ async function loadUsers() {
             api('/auth/pending-count')
         ]);
         
-        pendingUsers = pendingRes.users || [];
-        allUsers = usersRes.users || [];
-        
-        const pendingCount = countRes.count || 0;
-        const badge = document.getElementById('pendingBadge');
-        if (pendingCount > 0) {
-            badge.textContent = pendingCount;
-            badge.style.display = 'inline';
+        // Handle potential error responses
+        if (!pendingRes || !pendingRes.success) {
+            console.error('Failed to load pending users:', pendingRes);
+            pendingUsers = [];
         } else {
-            badge.style.display = 'none';
+            pendingUsers = pendingRes.users || [];
+        }
+        
+        if (!usersRes || !usersRes.success) {
+            console.error('Failed to load users:', usersRes);
+            allUsers = [];
+        } else {
+            allUsers = usersRes.users || [];
+        }
+        
+        const pendingCount = countRes?.count || 0;
+        const badge = document.getElementById('pendingBadge');
+        if (badge) {
+            if (pendingCount > 0) {
+                badge.textContent = pendingCount;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
         }
         
         renderPendingUsers(pendingUsers);
         renderAllUsers(allUsers);
     } catch (error) {
         console.error('Users error:', error);
+        showToast('Error loading users: ' + error.message, 'error');
     }
 }
 
