@@ -152,10 +152,11 @@ class Document {
     const [stats] = await db.query(`
       SELECT 
         COUNT(*) as total_documents,
-        SUM(CASE WHEN expiry_date < CURDATE() THEN 1 ELSE 0 END) as expired,
-        SUM(CASE WHEN expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as expiring_soon,
-        SUM(CASE WHEN is_verified = TRUE THEN 1 ELSE 0 END) as verified,
-        SUM(CASE WHEN is_verified = FALSE THEN 1 ELSE 0 END) as pending_verification
+        SUM(CASE WHEN expiry_date IS NOT NULL AND expiry_date < CURDATE() THEN 1 ELSE 0 END) as expired,
+        SUM(CASE WHEN expiry_date IS NOT NULL AND expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as expiring_soon,
+        SUM(CASE WHEN is_verified = 1 THEN 1 ELSE 0 END) as verified,
+        SUM(CASE WHEN is_verified = 0 OR is_verified IS NULL THEN 1 ELSE 0 END) as pending_verification
+      FROM documents
     `);
     return stats[0];
   }
